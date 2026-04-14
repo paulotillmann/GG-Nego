@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { 
   LayoutDashboard, Users, CalendarDays, Laptop, FileText, StickyNote,
   Search, Bell, Plus, Moon, Sun, LogOut, Settings,
@@ -14,6 +15,7 @@ import ModulesScreen    from '../pages/admin/ModulesScreen';
 import UsersManagement  from '../pages/admin/UsersManagement';
 import PeopleScreen     from '../pages/PeopleScreen';
 import ActivityLogsScreen from '../pages/admin/ActivityLogsScreen';
+import AgendaScreen     from '../pages/AgendaScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DashboardLayoutProps {
@@ -42,6 +44,7 @@ const CONFIG_ITEMS = [
 const renderContent = (activeMenu: string, children: React.ReactNode) => {
   if (activeMenu === 'perfil')           return <ProfileScreen />;
   if (activeMenu === 'pessoas')          return <PeopleScreen />;
+  if (activeMenu === 'agenda')           return <AgendaScreen />;
   if (activeMenu === 'config/perfis')    return <AccessProfiles />;
   if (activeMenu === 'config/modulos')   return <ModulesScreen />;
   if (activeMenu === 'config/usuarios')  return <UsersManagement />;
@@ -52,8 +55,8 @@ const renderContent = (activeMenu: string, children: React.ReactNode) => {
 // ─── Sidebar Item ─────────────────────────────────────────────────────────────
 const SidebarBtn: React.FC<{
   id: string; label: string; icon: React.ElementType;
-  active: boolean; onClick: () => void; indent?: boolean;
-}> = ({ id: _id, label, icon: Icon, active, onClick, indent }) => (
+  active: boolean; onClick: () => void; indent?: boolean; badge?: number;
+}> = ({ id: _id, label, icon: Icon, active, onClick, indent, badge }) => (
   <button
     onClick={onClick}
     className={`w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
@@ -65,7 +68,12 @@ const SidebarBtn: React.FC<{
     }`}
   >
     <Icon className={`mr-3 h-4 w-4 ${active ? 'text-white' : 'text-blue-100/50'}`} />
-    {label}
+    <span className="flex-1 text-left">{label}</span>
+    {badge != null && badge > 0 && (
+      <span className="ml-2 flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+        {badge > 9 ? '9+' : badge}
+      </span>
+    )}
   </button>
 );
 
@@ -79,8 +87,20 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
     return localStorage.getItem('theme') === 'dark';
   });
   const [configOpen, setConfigOpen]       = useState(false);
+  const [agendaBadge, setAgendaBadge]     = useState(0);
 
   const isConfigActive = activeMenu.startsWith('config/');
+
+  // Badge: compromissos de hoje com lembrar=true
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    supabase
+      .from('agenda')
+      .select('id', { count: 'exact', head: true })
+      .eq('data', today)
+      .eq('lembrar', true)
+      .then(({ count }) => setAgendaBadge(count ?? 0));
+  }, []);
 
   useEffect(() => {
     // Escuta mudanças de localStorage externas (caso existam) e inicial do sistema
@@ -142,6 +162,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
               icon={item.icon}
               active={activeMenu === item.id}
               onClick={() => setActiveMenu(item.id)}
+              badge={item.id === 'agenda' ? agendaBadge : undefined}
             />
           ))}
         </div>
