@@ -330,9 +330,10 @@ const RequerimentosScreen: React.FC = () => {
                     { label: 'Nº', key: 'numero_requerimento' as keyof Requerimento },
                     { label: 'Data Sessão', key: 'data_sessao' as keyof Requerimento },
                     { label: 'Título', key: 'titulo' as keyof Requerimento },
-                    { label: 'Solicitante', key: null },
-                    { label: 'Status', key: 'status' as keyof Requerimento },
                     { label: 'Resposta', key: 'resposta_recebida' as keyof Requerimento },
+                    { label: 'Status', key: 'status' as keyof Requerimento },
+                    { label: 'Data Protocolo', key: 'data_protocolo' as keyof Requerimento },
+                    { label: 'Data Cadastro', key: 'created_at' as keyof Requerimento },
                   ].map(col => (
                     <th key={col.label} className="px-4 py-3 text-left">
                       {col.key ? (
@@ -374,20 +375,23 @@ const RequerimentosScreen: React.FC = () => {
                     <td className="px-4 py-3 max-w-xs">
                       <p className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{item.titulo}</p>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
-                      {(item.pessoa as any)?.full_name ?? <span className="text-slate-300 dark:text-slate-600">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS_STYLES[item.status] ?? ''}`}>
-                        {item.status}
-                      </span>
-                    </td>
                     <td className="px-4 py-3">
                       {item.resposta_recebida ? (
                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${RESPOSTA_STYLES[item.resposta_recebida] ?? ''}`}>
                           {item.resposta_recebida}
                         </span>
                       ) : <span className="text-slate-300 dark:text-slate-600 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS_STYLES[item.status] ?? ''}`}>
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
+                      {fmtDate(item.data_protocolo)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
+                      {fmtDate(item.created_at?.split('T')[0])}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">

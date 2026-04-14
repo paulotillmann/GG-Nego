@@ -133,7 +133,7 @@ const RequerimentoForm: React.FC<RequerimentoFormProps> = ({ initialData, mode, 
         </button>
         <div>
           <h1 className="text-2xl font-heading font-bold text-slate-900 dark:text-white">
-            {mode === 'create' ? 'Novo Cadastro' : 'Editar Cadastro'}
+            {mode === 'create' ? 'Novo Requerimento' : 'Editar Requerimento'}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             Preencha as informações do requerimento
@@ -147,11 +147,44 @@ const RequerimentoForm: React.FC<RequerimentoFormProps> = ({ initialData, mode, 
         {/* ── Coluna principal ── */}
         <div className="lg:col-span-2 space-y-5">
 
-          {/* Título */}
-          <div className="bg-white dark:bg-[#1C2434] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
+          {/* Quadro: IDENTIFICAÇÃO */}
+          <div className="bg-white dark:bg-[#1C2434] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-              Informações do Requerimento
+              IDENTIFICAÇÃO
             </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Nº do Requerimento <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={numero}
+                    onChange={e => setNumero(e.target.value)}
+                    placeholder="Ex: 001/2025"
+                    className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Data da Sessão <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="date"
+                    value={dataSessao}
+                    onChange={e => setDataSessao(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -171,6 +204,60 @@ const RequerimentoForm: React.FC<RequerimentoFormProps> = ({ initialData, mode, 
 
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Pessoa Solicitante
+              </label>
+              <div className="relative">
+                <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={pessoaSearch}
+                  onChange={e => { setPessoaSearch(e.target.value); if (!e.target.value) setPessoaId(''); }}
+                  placeholder="Buscar pessoa ou entidade..."
+                  className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+              {pessoaSearch && filteredPessoas.length > 0 && !pessoaId && (
+                <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden max-h-48 overflow-y-auto mt-2">
+                  {filteredPessoas.slice(0, 8).map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => { setPessoaId(p.id); setPessoaSearch(p.full_name); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 text-left border-b border-slate-100 dark:border-slate-800 last:border-0 transition-colors"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 text-sm font-bold shrink-0">
+                        {p.full_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-900 dark:text-white">{p.full_name}</p>
+                        <p className="text-xs text-slate-400">{p.person_type}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {pessoaId && (
+                <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg mt-2">
+                  <span className="text-sm font-medium text-blue-800 dark:text-blue-300">{pessoaSearch}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setPessoaId(''); setPessoaSearch(''); }}
+                    className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                  >
+                    Remover
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quadro: INFORMAÇÕES ADICIONAIS */}
+          <div className="bg-white dark:bg-[#1C2434] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+              INFORMAÇÕES ADICIONAIS
+            </h3>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Informações Adicionais
               </label>
               <div className="relative">
@@ -178,102 +265,69 @@ const RequerimentoForm: React.FC<RequerimentoFormProps> = ({ initialData, mode, 
                 <textarea
                   value={info}
                   onChange={e => setInfo(e.target.value)}
-                  rows={3}
+                  rows={4}
                   placeholder="Observações, contexto ou histórico do requerimento..."
                   className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
                 />
               </div>
             </div>
           </div>
-
-          {/* Pessoa Solicitante */}
-          <div className="bg-white dark:bg-[#1C2434] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-              Pessoa Solicitante
-            </h3>
-            <div className="relative">
-              <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                value={pessoaSearch}
-                onChange={e => { setPessoaSearch(e.target.value); if (!e.target.value) setPessoaId(''); }}
-                placeholder="Buscar pessoa ou entidade..."
-                className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
-            {pessoaSearch && filteredPessoas.length > 0 && !pessoaId && (
-              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
-                {filteredPessoas.slice(0, 8).map(p => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => { setPessoaId(p.id); setPessoaSearch(p.full_name); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 text-left border-b border-slate-100 dark:border-slate-800 last:border-0 transition-colors"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 text-sm font-bold shrink-0">
-                      {p.full_name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">{p.full_name}</p>
-                      <p className="text-xs text-slate-400">{p.person_type}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-            {pessoaId && (
-              <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <span className="text-sm font-medium text-blue-800 dark:text-blue-300">{pessoaSearch}</span>
-                <button
-                  type="button"
-                  onClick={() => { setPessoaId(''); setPessoaSearch(''); }}
-                  className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
-                >
-                  Remover
-                </button>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* ── Coluna lateral ── */}
         <div className="space-y-5">
 
-          {/* Identificação */}
+          {/* Quadro: SITUAÇÃO */}
           <div className="bg-white dark:bg-[#1C2434] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-              Identificação
+              SITUAÇÃO
             </h3>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Nº do Requerimento <span className="text-red-500">*</span>
+                Resposta Recebida
               </label>
               <div className="relative">
-                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={numero}
-                  onChange={e => setNumero(e.target.value)}
-                  placeholder="Ex: 001/2025"
-                  className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                />
+                <ClipboardList className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <select
+                  value={resposta}
+                  onChange={e => setResposta(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm appearance-none"
+                >
+                  <option value="">Nenhuma</option>
+                  {RESPOSTAS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
               </div>
+              {resposta && (
+                <div className="mt-2">
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${RESPOSTA_STYLES[resposta] ?? ''}`}>
+                    {resposta}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Data da Sessão <span className="text-red-500">*</span>
+                Status <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  type="date"
-                  value={dataSessao}
-                  onChange={e => setDataSessao(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                />
+                <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <select
+                  value={status}
+                  onChange={e => setStatus(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm appearance-none"
+                >
+                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
+              {status && (
+                <div className="mt-2">
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLES[status] ?? ''}`}>
+                    {status}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div>
@@ -305,56 +359,6 @@ const RequerimentoForm: React.FC<RequerimentoFormProps> = ({ initialData, mode, 
                   className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 />
               </div>
-            </div>
-          </div>
-
-          {/* Situação */}
-          <div className="bg-white dark:bg-[#1C2434] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-              Situação
-            </h3>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Status <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <select
-                  value={status}
-                  onChange={e => setStatus(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm appearance-none"
-                >
-                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              {status && (
-                <span className={`inline-block mt-2 px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLES[status] ?? ''}`}>
-                  {status}
-                </span>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Resposta Recebida
-              </label>
-              <div className="relative">
-                <ClipboardList className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <select
-                  value={resposta}
-                  onChange={e => setResposta(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm appearance-none"
-                >
-                  <option value="">Nenhuma</option>
-                  {RESPOSTAS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              {resposta && (
-                <span className={`inline-block mt-2 px-2.5 py-0.5 rounded-full text-xs font-semibold ${RESPOSTA_STYLES[resposta] ?? ''}`}>
-                  {resposta}
-                </span>
-              )}
             </div>
           </div>
 
