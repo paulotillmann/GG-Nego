@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { 
   LayoutDashboard, Users, CalendarDays, Laptop, FileText, StickyNote,
   Search, Bell, Plus, Moon, Sun, LogOut, Settings,
-  Shield, Puzzle, UsersRound, ChevronDown, ChevronRight,
+  Shield, Puzzle, UsersRound, ChevronDown, ChevronRight, ScrollText,
 } from 'lucide-react';
 import logoBranca2 from '../assets/logos/logo_oficial_branca2.png';
 import logoNegoOficial from '../assets/logos/logo_nego_oficial.png';
@@ -13,6 +13,7 @@ import AccessProfiles   from '../pages/admin/AccessProfiles';
 import ModulesScreen    from '../pages/admin/ModulesScreen';
 import UsersManagement  from '../pages/admin/UsersManagement';
 import PeopleScreen     from '../pages/PeopleScreen';
+import ActivityLogsScreen from '../pages/admin/ActivityLogsScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DashboardLayoutProps {
@@ -34,6 +35,7 @@ const CONFIG_ITEMS = [
   { id: 'config/perfis',    label: 'Perfis de Acesso',     icon: Shield },
   { id: 'config/modulos',   label: 'Módulos',              icon: Puzzle },
   { id: 'config/usuarios',  label: 'Gestão de Usuários',   icon: UsersRound },
+  { id: 'config/logs',      label: 'Logs de Atividade',    icon: ScrollText },
 ];
 
 // ─── Content Router ───────────────────────────────────────────────────────────
@@ -43,6 +45,7 @@ const renderContent = (activeMenu: string, children: React.ReactNode) => {
   if (activeMenu === 'config/perfis')    return <AccessProfiles />;
   if (activeMenu === 'config/modulos')   return <ModulesScreen />;
   if (activeMenu === 'config/usuarios')  return <UsersManagement />;
+  if (activeMenu === 'config/logs')      return <ActivityLogsScreen />;
   return children;
 };
 

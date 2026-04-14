@@ -141,11 +141,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user?.id, fetchProfile]);
 
+  // ── logActivity ─────────────────────────────────────────────────────────
+  const logActivity = async (
+    action: string,
+    description: string,
+    userId?: string,
+    userName?: string,
+    userEmail?: string
+  ) => {
+    try {
+      await supabase.from('activity_logs').insert({
+        user_id: userId ?? null,
+        user_email: userEmail ?? null,
+        user_name: userName ?? userEmail ?? null,
+        action,
+        description,
+      });
+    } catch {
+      // Falha silenciosa — não interrompe o fluxo principal
+    }
+  };
+
   // ── signIn ──────────────────────────────────────────────────────────────
   const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      // Traduz mensagens comuns
       if (error.message.includes('Invalid login credentials')) {
         return { error: 'E-mail ou senha incorretos.' };
       }
@@ -153,6 +173,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: 'Confirme seu e-mail antes de acessar.' };
       }
       return { error: error.message };
+    }
+    // Registra o login com sucesso
+    if (data.user) {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', data.user.id)
+        .single();
+      await logActivity(
+        'LOGIN',
+        `Usuário fez login no sistema`,
+        data.user.id,
+        profileData?.full_name ?? data.user.email,
+        data.user.email
+      );
     }
     return { error: null };
   };
@@ -184,6 +219,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // ── signOut ─────────────────────────────────────────────────────────────
   const signOut = async () => {
+    // Registra o logout antes de destruir a sessão
+    if (user) {
+      await logActivity(
+        'LOGOUT',
+        `Usuário saiu do sistema`,
+        user.id,
+        profile?.full_name ?? user.email,
+        user.email
+      );
+    }
     await supabase.auth.signOut();
     localStorage.removeItem('theme');
     document.documentElement.classList.remove('dark');
