@@ -82,6 +82,15 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
   useEffect(() => {
     // Escuta mudanças de localStorage externas (caso existam) e inicial do sistema
     document.documentElement.classList.toggle('dark', isDarkMode);
+    
+    // Escuta eventos customizados de navegação (ex: vindo de botões no Dashboard)
+    const handleNav = (e: any) => {
+      if (e.detail && typeof e.detail === 'string') {
+        setActiveMenu(e.detail);
+      }
+    };
+    window.addEventListener('navigate', handleNav);
+    return () => window.removeEventListener('navigate', handleNav);
   }, [isDarkMode]);
 
   // Se o profile já carregou e temos o setting dele na context (vem do DB), mantemos sincronizados:

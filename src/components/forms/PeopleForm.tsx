@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2 } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { validateCPF, validateCNPJ, maskCPF, maskCNPJ, maskPhone } from '../../utils/validators';
+import { validateCPF, validateCNPJ, maskCPF, maskCNPJ, maskPhone, maskCEP } from '../../utils/validators';
 import DependentesSection from './DependentesSection';
 
 // ─── Tipos Exportados ─────────────────────────────────────────────────────────
@@ -11,8 +11,11 @@ export interface Pessoa {
   full_name: string;
   pronoun: string | null;
   address: string | null;
+  cep: string | null;
   neighborhood: string | null;
   city: string | null;
+  latitude: number | null;
+  longitude: number | null;
   housing_type: string | null;
   phone: string | null;
   birth_date: string | null;
@@ -32,7 +35,8 @@ export const HOUSING_TYPES = ['Própria', 'Alugada', 'Cedida', 'Financiada'];
 export const PERSON_TYPES = ['Pessoa', 'Autoridade', 'Entidade', 'Empresa'];
 
 export const DEFAULT_FORM: Partial<Pessoa> = {
-  person_type: 'Pessoa', full_name: '', pronoun: 'Sr.', address: '', neighborhood: '', city: '',
+  person_type: 'Pessoa', full_name: '', pronoun: 'Sr.', address: '', cep: '', neighborhood: '', city: '',
+  latitude: null, longitude: null,
   housing_type: 'Própria', phone: '', birth_date: '', email: '',
   cpf: '', cnpj: '', facebook_url: '', instagram_url: '', reference: '', notes: ''
 };
@@ -51,6 +55,8 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
   const [formType, setFormType] = useState<'PF' | 'PJ'>(initialData?.cnpj ? 'PJ' : 'PF');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState<string | null>(null);
 
   // Controla se a pessoa já foi salva na sessão atual (novo cadastro)
   // No modo edit, já temos o ID. No modo create, ficamos aguardando o retorno do insert.
@@ -62,6 +68,48 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
   // Dependentes estão liberados quando: modo edit (já tem ID) OU pessoa foi salva agora
   const dependentesEnabled = !!savedPersonId;
   const pessoaId = savedPersonId || '';
+
+  // ── Busca CEP ───────────────────────────────────────────────────────────────
+  const fetchCEP = useCallback(async (cepValue: string) => {
+    const digits = cepValue.replace(/\D/g, '');
+    if (digits.length !== 8) return;
+
+    setCepLoading(true);
+    setCepError(null);
+    try {
+      const res = await fetch(`https://cep.awesomeapi.com.br/json/${digits}`);
+      if (!res.ok) throw new Error('CEP não encontrado');
+      const data = await res.json();
+
+      if (data.status === 404 || data.code === 'not_found') {
+        throw new Error('CEP não encontrado');
+      }
+
+      setForm(prev => ({
+        ...prev,
+        address: data.address || prev.address,
+        neighborhood: data.district || prev.neighborhood,
+        city: data.city && data.state ? `${data.city} - ${data.state}` : prev.city,
+        latitude: data.lat ? parseFloat(data.lat) : null,
+        longitude: data.lng ? parseFloat(data.lng) : null,
+      }));
+    } catch {
+      setCepError('CEP não encontrado. Verifique e tente novamente.');
+    } finally {
+      setCepLoading(false);
+    }
+  }, []);
+
+  const handleCepChange = (value: string) => {
+    const masked = maskCEP(value);
+    setForm(prev => ({ ...prev, cep: masked }));
+    setCepError(null);
+
+    const digits = masked.replace(/\D/g, '');
+    if (digits.length === 8) {
+      fetchCEP(digits);
+    }
+  };
 
   // ── Handle Save ──────────────────────────────────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
@@ -252,12 +300,47 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
             <div className="col-span-1 md:col-span-12">
               <h4 className="text-sm font-semibold text-slate-900 dark:text-white mt-4 border-b border-slate-100 dark:border-slate-800 pb-2">Endereço & Localidade</h4>
             </div>
-            <div className="col-span-1 md:col-span-12 lg:col-span-5">
+
+            {/* CEP com busca */}
+            <div className="col-span-1 md:col-span-12 lg:col-span-3">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CEP</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={form.cep || ''}
+                  onChange={e => handleCepChange(e.target.value)}
+                  placeholder="00000-000"
+                  maxLength={9}
+                  className={`w-full pl-3.5 pr-10 py-2.5 border rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 ${
+                    cepError ? 'border-red-400 dark:border-red-500' : 'border-slate-300 dark:border-slate-600'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => fetchCEP(form.cep || '')}
+                  disabled={cepLoading || (form.cep?.replace(/\D/g, '')?.length || 0) < 8}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30 transition-colors rounded-md hover:bg-slate-100 dark:hover:bg-slate-700"
+                  title="Buscar CEP"
+                >
+                  {cepLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                </button>
+              </div>
+              {cepError && (
+                <p className="text-xs text-red-500 dark:text-red-400 mt-1 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" /> {cepError}
+                </p>
+              )}
+            </div>
+
+            {/* Logradouro */}
+            <div className="col-span-1 md:col-span-12 lg:col-span-9">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Logradouro / Endereço</label>
               <input type="text" value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
-            <div className="col-span-1 md:col-span-6 lg:col-span-3">
+
+            {/* Bairro / Cidade / Tipo Casa */}
+            <div className="col-span-1 md:col-span-6 lg:col-span-4">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Bairro</label>
               <input type="text" value={form.neighborhood || ''} onChange={e => setForm({ ...form, neighborhood: e.target.value })}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
@@ -265,7 +348,7 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
             <div className="col-span-1 md:col-span-6 lg:col-span-4">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Cidade (UF)</label>
               <input type="text" value={form.city || ''} onChange={e => setForm({ ...form, city: e.target.value })}
-                placeholder="Ex: São Paulo - SP"
+                placeholder="Ex: Pelotas - RS"
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="col-span-1 md:col-span-6 lg:col-span-4">
@@ -275,10 +358,40 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
                 {HOUSING_TYPES.map(h => <option key={h} value={h}>{h}</option>)}
               </select>
             </div>
-            <div className="col-span-1 md:col-span-6 lg:col-span-8">
+
+            {/* Ponto de Referência */}
+            <div className="col-span-1 md:col-span-12">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Ponto de Referência</label>
               <input type="text" value={form.reference || ''} onChange={e => setForm({ ...form, reference: e.target.value })}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            {/* Latitude / Longitude (somente leitura) */}
+            <div className="col-span-1 md:col-span-6">
+              <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" /> Latitude
+              </label>
+              <input
+                type="text"
+                value={form.latitude != null ? String(form.latitude) : ''}
+                readOnly
+                tabIndex={-1}
+                placeholder="Preenchido via CEP"
+                className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed"
+              />
+            </div>
+            <div className="col-span-1 md:col-span-6">
+              <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" /> Longitude
+              </label>
+              <input
+                type="text"
+                value={form.longitude != null ? String(form.longitude) : ''}
+                readOnly
+                tabIndex={-1}
+                placeholder="Preenchido via CEP"
+                className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed"
+              />
             </div>
 
             {/* Seção Redes & Observações */}

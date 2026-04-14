@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Loader2, CheckCircle,
-  Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown
+  Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown,
+  Users, ShieldCheck, Building2, Briefcase
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { maskPhone } from '../utils/validators';
@@ -27,6 +28,16 @@ const PeopleScreen: React.FC = () => {
   // Page mode state
   const [showForm, setShowForm] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Partial<Pessoa> | null>(null);
+
+  // ─── Auto-open form check (Vindo do Dashboard) ──────────────────────────────
+  useEffect(() => {
+    const autoAction = sessionStorage.getItem('autoOpenForm_pessoas');
+    if (autoAction === 'create') {
+      sessionStorage.removeItem('autoOpenForm_pessoas');
+      setEditingPerson(null);
+      setShowForm(true);
+    }
+  }, []);
   
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -176,6 +187,16 @@ const PeopleScreen: React.FC = () => {
     return `Página ${currentPage} de ${totalPages} · Mostrar ${start}-${end} de ${filtered.length} registros`;
   };
 
+  // ── Stats ──────────────────────────────────────────────────────────────
+  const stats = React.useMemo(() => {
+    return {
+      pessoa: people.filter(p => p.person_type === 'Pessoa').length,
+      autoridade: people.filter(p => p.person_type === 'Autoridade').length,
+      entidade: people.filter(p => p.person_type === 'Entidade').length,
+      empresa: people.filter(p => p.person_type === 'Empresa').length,
+    };
+  }, [people]);
+
   // Se o formulário estiver ativo, renderizamos ele (Modo Página).
   if (showForm) {
     return (
@@ -216,6 +237,26 @@ const PeopleScreen: React.FC = () => {
             <Plus className="h-4 w-4 mr-2" /> Novo Cadastro
           </button>
         </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Pessoas', value: stats.pessoa, color: 'text-blue-600 dark:text-blue-400', icon: Users },
+          { label: 'Autoridades', value: stats.autoridade, color: 'text-purple-600 dark:text-purple-400', icon: ShieldCheck },
+          { label: 'Entidades', value: stats.entidade, color: 'text-emerald-600 dark:text-emerald-400', icon: Building2 },
+          { label: 'Empresas', value: stats.empresa, color: 'text-amber-600 dark:text-amber-400', icon: Briefcase },
+        ].map((stat, i) => (
+          <div key={i} className="bg-white dark:bg-[#1C2434] rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-blue-500/50 transition-colors relative overflow-hidden group">
+            <div className="absolute top-1/2 -translate-y-1/2 -right-4 opacity-5 dark:opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-300">
+              <stat.icon size={80} />
+            </div>
+            <span className="text-sm font-medium text-slate-500 dark:text-slate-400 relative z-10">{stat.label}</span>
+            <div className={`mt-2 text-3xl font-heading font-bold ${stat.color} relative z-10`}>
+              {stat.value}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Toast */}

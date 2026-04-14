@@ -102,3 +102,12 @@ export const maskPhone = (value: string) => {
   if (d.length <= 10) return d.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
   return d.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3').slice(0, 15);
 };
+
+/**
+ * Aplica máscara de CEP (XXXXX-XXX)
+ */
+export const maskCEP = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+};
