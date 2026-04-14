@@ -16,6 +16,7 @@ import UsersManagement  from '../pages/admin/UsersManagement';
 import PeopleScreen     from '../pages/PeopleScreen';
 import ActivityLogsScreen from '../pages/admin/ActivityLogsScreen';
 import AgendaScreen     from '../pages/AgendaScreen';
+import RequerimentosScreen from '../pages/RequerimentosScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DashboardLayoutProps {
@@ -45,6 +46,7 @@ const renderContent = (activeMenu: string, children: React.ReactNode) => {
   if (activeMenu === 'perfil')           return <ProfileScreen />;
   if (activeMenu === 'pessoas')          return <PeopleScreen />;
   if (activeMenu === 'agenda')           return <AgendaScreen />;
+  if (activeMenu === 'requerimentos')    return <RequerimentosScreen />;
   if (activeMenu === 'config/perfis')    return <AccessProfiles />;
   if (activeMenu === 'config/modulos')   return <ModulesScreen />;
   if (activeMenu === 'config/usuarios')  return <UsersManagement />;
@@ -88,6 +90,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
   });
   const [configOpen, setConfigOpen]       = useState(false);
   const [agendaBadge, setAgendaBadge]     = useState(0);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const isConfigActive = activeMenu.startsWith('config/');
 
@@ -96,10 +100,14 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
     const today = new Date().toISOString().slice(0, 10);
     supabase
       .from('agenda')
-      .select('id', { count: 'exact', head: true })
+      .select('*, pessoa(full_name)')
       .eq('data', today)
       .eq('lembrar', true)
-      .then(({ count }) => setAgendaBadge(count ?? 0));
+      .order('horario_inicio', { ascending: true })
+      .then(({ data }) => {
+        setNotifications(data ?? []);
+        setAgendaBadge(data?.length ?? 0);
+      });
   }, []);
 
   useEffect(() => {
@@ -257,10 +265,107 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
             <button onClick={toggleDarkMode} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
               {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </button>
-            <button className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 relative rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900" />
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className={`p-2 relative rounded-full transition-colors ${
+                  showNotifications 
+                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' 
+                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Bell className="h-5 w-5" />
+                {agendaBadge > 0 && (
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900" />
+                )}
+              </button>
+
+              <AnimatePresence>
+                {showNotifications && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowNotifications(false)} 
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl z-50 overflow-hidden"
+                    >
+                      <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <h3 className="font-heading font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <Bell className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          Lembretes
+                        </h3>
+                        {agendaBadge > 0 && (
+                          <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold">
+                            {agendaBadge} HOJE
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="max-h-[350px] overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <div className="p-8 text-center">
+                            <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                              <Bell className="h-6 w-6 text-slate-300 dark:text-slate-600" />
+                            </div>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Nenhum lembrete para hoje.</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-slate-50 dark:divide-slate-800">
+                            {notifications.map((notif) => (
+                              <div 
+                                key={notif.id}
+                                className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
+                                onClick={() => {
+                                  setActiveMenu('agenda');
+                                  setShowNotifications(false);
+                                }}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
+                                    notif.tipo === 'Reunião' ? 'bg-purple-500' :
+                                    notif.tipo === 'Visita' ? 'bg-emerald-500' : 'bg-amber-500'
+                                  }`} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-0.5">
+                                      <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 uppercase">
+                                        {notif.horario_inicio.slice(0, 5)}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400">Hoje</span>
+                                    </div>
+                                    <p className="text-sm font-semibold text-slate-900 dark:text-white line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                      {notif.titulo_compromisso}
+                                    </p>
+                                    {notif.local && (
+                                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                        📍 {notif.local}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          setActiveMenu('agenda');
+                          setShowNotifications(false);
+                        }}
+                        className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 text-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors border-t border-slate-100 dark:border-slate-800"
+                      >
+                        Ver Agenda Completa
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Profile chip */}
             <div

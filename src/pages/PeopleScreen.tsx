@@ -221,7 +221,8 @@ const PeopleScreen: React.FC = () => {
       {/* Page Heading matching the reference UI */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white">
+          <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white flex items-center gap-3">
+            <Users className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             Pessoas e Entidades
           </h1>
           <p className="text-sm font-sans text-slate-500 dark:text-slate-400 mt-1">

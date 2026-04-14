@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ArrowLeft, Save, Loader2, AlertCircle,
+  ChevronLeft, Save, Loader2, AlertCircle,
   Calendar, Clock, MapPin, Users, FileText, Bell, Tag,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -130,16 +130,17 @@ const AgendaForm: React.FC<AgendaFormProps> = ({ initialData, mode, onClose, onS
         <button
           type="button"
           onClick={onClose}
-          className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+          className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+          title="Voltar"
         >
-          <ArrowLeft className="h-4 w-4" /> Voltar
+          <ChevronLeft className="h-5 w-5" />
         </button>
         <div>
           <h1 className="text-2xl font-heading font-bold text-slate-900 dark:text-white">
-            {mode === 'create' ? 'Novo Compromisso' : 'Editar Compromisso'}
+            {mode === 'create' ? 'Novo Cadastro' : 'Editar Cadastro'}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Preencha os dados do compromisso
+            Preencha as informações do novo contato
           </p>
         </div>
       </div>
