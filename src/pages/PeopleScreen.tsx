@@ -242,12 +242,18 @@ const PeopleScreen: React.FC = () => {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Pessoas', value: stats.pessoa, color: 'text-blue-600 dark:text-blue-400', icon: Users },
-          { label: 'Autoridades', value: stats.autoridade, color: 'text-purple-600 dark:text-purple-400', icon: ShieldCheck },
-          { label: 'Entidades', value: stats.entidade, color: 'text-emerald-600 dark:text-emerald-400', icon: Building2 },
-          { label: 'Empresas', value: stats.empresa, color: 'text-amber-600 dark:text-amber-400', icon: Briefcase },
+          { label: 'Pessoas', type: 'Pessoa', value: stats.pessoa, color: 'text-blue-600 dark:text-blue-400', icon: Users },
+          { label: 'Autoridades', type: 'Autoridade', value: stats.autoridade, color: 'text-purple-600 dark:text-purple-400', icon: ShieldCheck },
+          { label: 'Entidades', type: 'Entidade', value: stats.entidade, color: 'text-emerald-600 dark:text-emerald-400', icon: Building2 },
+          { label: 'Empresas', type: 'Empresa', value: stats.empresa, color: 'text-amber-600 dark:text-amber-400', icon: Briefcase },
         ].map((stat, i) => (
-          <div key={i} className="bg-white dark:bg-[#1C2434] rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-blue-500/50 transition-colors relative overflow-hidden group">
+          <div 
+            key={i} 
+            onClick={() => setFilterType(filterType === stat.type ? '' : stat.type)}
+            className={`bg-white dark:bg-[#1C2434] rounded-2xl p-5 border shadow-sm flex flex-col justify-between transition-colors relative overflow-hidden group cursor-pointer
+              ${filterType === stat.type ? 'border-blue-500 dark:border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 dark:border-slate-800 hover:border-blue-500/50'}
+            `}
+          >
             <div className="absolute top-1/2 -translate-y-1/2 -right-4 opacity-5 dark:opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-300">
               <stat.icon size={80} />
             </div>
