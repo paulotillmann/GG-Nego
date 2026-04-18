@@ -18,6 +18,7 @@ import ActivityLogsScreen from '../pages/admin/ActivityLogsScreen';
 import AgendaScreen     from '../pages/AgendaScreen';
 import RequerimentosScreen from '../pages/RequerimentosScreen';
 import AtendimentoScreen from '../pages/AtendimentoScreen';
+import AnotacoesScreen    from '../pages/AnotacoesScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DashboardLayoutProps {
@@ -60,6 +61,7 @@ const renderContent = (activeMenu: string, children: React.ReactNode) => {
         if (activeMenu === 'perfil')           return <ProfileScreen />;
         if (activeMenu === 'pessoas')          return <PeopleScreen />;
         if (activeMenu === 'agenda')           return <AgendaScreen />;
+        if (activeMenu === 'anotacoes')        return <AnotacoesScreen />;
         if (activeMenu === 'auto-atendimento') return <AtendimentoScreen />;
         if (activeMenu === 'requerimentos')    return <RequerimentosScreen />;
         if (activeMenu === 'config/perfis')    return <AccessProfiles />;
@@ -404,7 +406,11 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
 
         {/* Scrollable Content */}
         <div id="main-scroll-container" className="flex-1 overflow-y-auto">
-          <div className="p-8 max-w-[1600px] mx-auto">
+          <div className={
+            activeMenu === 'anotacoes'
+              ? 'h-full w-full'
+              : 'p-8 max-w-[1600px] mx-auto'
+          }>
             {renderContent(activeMenu, children)}
           </div>
         </div>
