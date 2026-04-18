@@ -58,6 +58,32 @@ const PeopleScreen: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // ── Realtime subscription ──────────────────────────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime:pessoa')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pessoa' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setPeople((prev) => [payload.new as Pessoa, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setPeople((prev) =>
+              prev.map((p) => (p.id === (payload.new as Pessoa).id ? (payload.new as Pessoa) : p))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setPeople((prev) => prev.filter((p) => p.id !== (payload.old as Pessoa).id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
   

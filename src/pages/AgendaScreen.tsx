@@ -16,7 +16,17 @@ const MONTHS = [
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
 ];
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// Retorna a data local (fuso do navegador) no formato YYYY-MM-DD
+const localDateStr = (offset = 0): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  const y   = d.getFullYear();
+  const m   = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+const todayStr    = () => localDateStr(0);
+const tomorrowStr = () => localDateStr(1);
 
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : '');
 
@@ -44,7 +54,9 @@ const AgendaScreen: React.FC = () => {
 
   // Filtros
   const [filterTipo, setFilterTipo]     = useState('');
-  const [filterDay, setFilterDay]       = useState('');        // 'YYYY-MM-DD'
+  const [filterDay, setFilterDay]       = useState(todayStr());
+  const [filterInicio, setFilterInicio] = useState('');
+  const [filterFim, setFilterFim]       = useState('');
   const [search, setSearch]             = useState('');
 
   // Calendário
@@ -55,23 +67,47 @@ const AgendaScreen: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 8;
   const [sortConfig, setSortConfig] = useState<{ key: keyof AgendaItem; direction: 'asc'|'desc' }>({
-    key: 'data', direction: 'asc',
+    key: 'data', direction: 'desc',
   });
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     const { data } = await supabase
       .from('agenda')
       .select('*, pessoa(full_name)')
-      .order('data', { ascending: true })
-      .order('horario_inicio', { ascending: true });
+      .order('data', { ascending: false })
+      .order('horario_inicio', { ascending: false });
     setItems((data ?? []) as AgendaItem[]);
-    setLoading(false);
+    if (showLoading) setLoading(false);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { setCurrentPage(1); }, [search, filterTipo, filterDay]);
+  useEffect(() => {
+    fetchData();
+
+    // Inscreve no Realtime do Supabase para atualizar em tempo real quando o n8n alterar o banco
+    const subscription = supabase
+      .channel('agenda_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agenda' }, () => {
+        fetchData(false);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [fetchData]);
+  useEffect(() => { setCurrentPage(1); }, [search, filterTipo, filterDay, filterInicio, filterFim]);
+
+  // ─── Auto-open form check (Vindo do Dashboard) ──────────────────────────────
+  useEffect(() => {
+    const autoAction = sessionStorage.getItem('autoOpenForm_agenda');
+    if (autoAction === 'create') {
+      sessionStorage.removeItem('autoOpenForm_agenda');
+      setEditingItem(null);
+      setShowForm(true);
+    }
+  }, []);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
@@ -83,12 +119,14 @@ const AgendaScreen: React.FC = () => {
 
   // ── Agenda de Hoje ────────────────────────────────────────────────────────
   const today = todayStr();
-  const todayItems = useMemo(() =>
-    items
+  const now = new Date();
+  const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  const todayItems = useMemo(() => {
+    return items
       .filter(i => i.data === today)
-      .sort((a, b) => (a.horario_inicio > b.horario_inicio ? 1 : -1)),
-    [items, today]
-  );
+      .sort((a, b) => (a.horario_inicio < b.horario_inicio ? 1 : -1));
+  }, [items, today]);
 
   // ── Calendário ────────────────────────────────────────────────────────────
   const calDays = useMemo(() => {
@@ -133,9 +171,11 @@ const AgendaScreen: React.FC = () => {
         ((i.pessoa as any)?.full_name ?? '').toLowerCase().includes(q);
       const matchTipo = filterTipo ? i.tipo === filterTipo : true;
       const matchDay  = filterDay  ? i.data === filterDay  : true;
-      return matchSearch && matchTipo && matchDay;
+      const matchInicio = filterInicio ? i.data >= filterInicio : true;
+      const matchFim = filterFim ? i.data <= filterFim : true;
+      return matchSearch && matchTipo && matchDay && matchInicio && matchFim;
     });
-  }, [items, search, filterTipo, filterDay]);
+  }, [items, search, filterTipo, filterDay, filterInicio, filterFim]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -144,6 +184,13 @@ const AgendaScreen: React.FC = () => {
       const vB = (b[key] ?? '').toString();
       if (vA < vB) return direction === 'asc' ? -1 : 1;
       if (vA > vB) return direction === 'asc' ? 1 : -1;
+      
+      // Desempate por horário de início
+      const tA = (a.horario_inicio ?? '').toString();
+      const tB = (b.horario_inicio ?? '').toString();
+      if (tA < tB) return direction === 'asc' ? -1 : 1;
+      if (tA > tB) return direction === 'asc' ? 1 : -1;
+
       return 0;
     });
   }, [filtered, sortConfig]);
@@ -177,18 +224,27 @@ const AgendaScreen: React.FC = () => {
     if (!error) {
       setDeleteId(null);
       setSelectedIds(prev => prev.filter(s => s !== id));
-      fetchData();
+      fetchData(false);
       showSuccess('Compromisso removido!');
+    } else {
+      console.error('Erro ao excluir:', error);
+      showSuccess(`Erro ao excluir: ${error.message}`);
+      setDeleteId(null);
     }
   };
 
   const handleBulkDelete = async () => {
+    const count = selectedIds.length;
     const { error } = await supabase.from('agenda').delete().in('id', selectedIds);
     if (!error) {
       setShowBulkDelete(false);
       setSelectedIds([]);
-      fetchData();
-      showSuccess(`${selectedIds.length} compromissos removidos!`);
+      fetchData(false);
+      showSuccess(`${count} compromissos removidos!`);
+    } else {
+      console.error('Erro ao excluir em massa:', error);
+      showSuccess(`Erro ao excluir: ${error.message}`);
+      setShowBulkDelete(false);
     }
   };
 
@@ -380,25 +436,28 @@ const AgendaScreen: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="flex-1 space-y-3 overflow-y-auto pr-1 max-h-80">
-              {todayItems.map(item => {
+            <div className="flex-1 space-y-3 overflow-hidden">
+              {todayItems.slice(0, 4).map(item => {
                 const meta = TIPO_BADGE[item.tipo ?? ''] ?? { color: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' };
+                const isPast = item.horario_inicio && item.horario_inicio.slice(0, 5) < currentTimeStr;
                 return (
-                  <div key={item.id} className="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-                    <div className={`w-1 rounded-full shrink-0 ${meta.dot}`} />
+                  <div key={item.id} className={`flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 transition-all ${isPast ? 'opacity-50' : ''}`}>
+                    <div className={`w-1 rounded-full shrink-0 ${meta.dot} ${isPast ? 'bg-slate-300 dark:bg-slate-600' : ''}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300">
                           {fmtTime(item.horario_inicio)}{item.horario_fim ? ` – ${fmtTime(item.horario_fim)}` : ''}
                         </span>
                         {item.tipo && (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${meta.color}`}>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${isPast ? 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400' : meta.color}`}>
                             {item.tipo}
                           </span>
                         )}
                         {item.lembrar && <Bell className="h-3 w-3 text-blue-500" />}
                       </div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{item.titulo_compromisso}</p>
+                      <p className={`text-sm font-semibold truncate ${isPast ? 'text-slate-500 dark:text-slate-400 line-through' : 'text-slate-900 dark:text-white'}`}>
+                        {item.titulo_compromisso}
+                      </p>
                       {item.local && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
                           <MapPin className="h-3 w-3" /> {item.local}
@@ -414,6 +473,13 @@ const AgendaScreen: React.FC = () => {
                   </div>
                 );
               })}
+              {todayItems.length > 4 && (
+                <div className="mt-3 text-center">
+                  <span className="inline-block text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full">
+                    + {todayItems.length - 4} compromisso(s) hoje
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -444,9 +510,10 @@ const AgendaScreen: React.FC = () => {
 
       {/* Listagem */}
       <div className="bg-white dark:bg-[#1C2434] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        {/* Barra de busca + bulk delete */}
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="relative flex-1 max-w-sm">
+        {/* Barra de Busca + Filtros + Bulk Delete */}
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-4">
+          
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
               <CalendarDays className="h-4 w-4" />
             </span>
@@ -454,16 +521,61 @@ const AgendaScreen: React.FC = () => {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por título, local ou pessoa..."
-              className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              placeholder="Buscar compromisso..."
+              className="w-full pl-9 pr-4 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          {/* Botões Rápidos */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <button
+              onClick={() => { setFilterDay(todayStr()); setFilterInicio(''); setFilterFim(''); }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${filterDay === todayStr() ? 'bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/40 dark:border-blue-800 dark:text-blue-300' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'}`}
+            >
+              Hoje
+            </button>
+            <button
+              onClick={() => { setFilterDay(tomorrowStr()); setFilterInicio(''); setFilterFim(''); }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${filterDay === tomorrowStr() ? 'bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/40 dark:border-blue-800 dark:text-blue-300' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'}`}
+            >
+              Amanhã
+            </button>
+            <button
+              onClick={() => { setFilterDay(''); setFilterInicio(''); setFilterFim(''); }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${!filterDay && !filterInicio && !filterFim ? 'bg-slate-800 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'}`}
+            >
+              Todos
+            </button>
+          </div>
+
+          {/* Spacer automático para empurrar o resto para a direita em telas largas */}
+          <div className="hidden lg:block lg:flex-1"></div>
+
+          {/* Filtro Período */}
+          <div className="flex items-center gap-2 text-sm flex-wrap ml-auto">
+            <span className="text-slate-500 text-xs font-medium uppercase tracking-wide hidden md:inline-block">Período:</span>
+            <input
+              type="date"
+              value={filterInicio}
+              onChange={e => { setFilterInicio(e.target.value); setFilterDay(''); }}
+              className="px-2 py-1.5 w-[120px] border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-xs"
+            />
+            <span className="text-slate-400 text-xs font-medium">até</span>
+            <input
+              type="date"
+              value={filterFim}
+              onChange={e => { setFilterFim(e.target.value); setFilterDay(''); }}
+              className="px-2 py-1.5 w-[120px] border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-xs"
+            />
+          </div>
+
+          {/* Bulk Delete (Muda de posição dependendo da tela, mas fica no fim) */}
           {selectedIds.length > 0 && (
             <button
               onClick={() => setShowBulkDelete(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors ml-auto sm:ml-0"
             >
-              <Trash2 className="h-4 w-4" /> Excluir {selectedIds.length} selecionados
+              <Trash2 className="h-3.5 w-3.5" /> Excluir {selectedIds.length}
             </button>
           )}
         </div>

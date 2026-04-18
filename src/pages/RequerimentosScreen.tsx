@@ -4,8 +4,12 @@ import {
   FileText, Plus, Loader2, CheckCircle,
   Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown,
   CheckCircle2, XCircle, FilePlus2, Clock3, AlertCircle,
-  Search, Filter, X,
+  Search, Filter, X, RefreshCw, Printer, Upload, Paperclip, ExternalLink
 } from 'lucide-react';
+
+type ArquivoReq = { id: string; nome_arquivo: string; arquivo_url: string; tamanho_bytes: number | null; created_at: string; };
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 import RequerimentoForm, {
   Requerimento, STATUSES, RESPOSTAS, STATUS_STYLES, RESPOSTA_STYLES,
@@ -14,8 +18,20 @@ import RequerimentoForm, {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtDate = (d?: string | null) => {
   if (!d) return '—';
-  const [y, m, day] = d.split('-');
+  const [y, m, day] = d.split('T')[0].split('-');
   return `${day}/${m}/${y}`;
+};
+
+const calcDiasProtocolo = (d?: string | null) => {
+  if (!d) return 0;
+  const [y, m, day] = d.split('T')[0].split('-');
+  const dataRef = new Date(Number(y), Number(m) - 1, Number(day));
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  
+  const diffTime = hoje.getTime() - dataRef.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 ? diffDays : 0;
 };
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -28,6 +44,25 @@ const RequerimentosScreen: React.FC = () => {
   const [deleteId, setDeleteId]       = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBulkDelete, setShowBulkDelete] = useState(false);
+
+  // Upload PDF (múltiplos)
+  const [uploadItem, setUploadItem]     = useState<Requerimento | null>(null);
+  const [uploadFiles, setUploadFiles]   = useState<File[]>([]);
+  const [uploading, setUploading]       = useState(false);
+  const [uploadError, setUploadError]   = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<string>('');
+
+  // Visualizar arquivos
+  const [viewArquivosItem, setViewArquivosItem]   = useState<Requerimento | null>(null);
+  const [viewArquivos, setViewArquivos]           = useState<ArquivoReq[]>([]);
+  const [loadingArquivos, setLoadingArquivos]     = useState(false);
+  const [deletingArquivoId, setDeletingArquivoId] = useState<string | null>(null);
+  
+  // Visualizar titulo
+  const [viewTituloItem, setViewTituloItem]   = useState<Requerimento | null>(null);
+
+  // Mapa de contagem de arquivos por requerimento_id
+  const [arquivosCount, setArquivosCount] = useState<Record<string, number>>({});
 
   // Filtros
   const [search, setSearch]         = useState('');
@@ -46,16 +81,61 @@ const RequerimentosScreen: React.FC = () => {
   // ── Fetch ───────────────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('requerimento')
-      .select('*, pessoa(full_name)')
-      .order('data_sessao', { ascending: false });
+    const [{ data }, { data: counts }] = await Promise.all([
+      supabase.from('requerimento').select('*, pessoa(full_name)').order('data_sessao', { ascending: false }),
+      supabase.from('requerimento_arquivos').select('requerimento_id'),
+    ]);
     setItems((data ?? []) as Requerimento[]);
+    // montar mapa de contagem
+    const cmap: Record<string, number> = {};
+    for (const row of (counts ?? [])) {
+      cmap[row.requerimento_id] = (cmap[row.requerimento_id] ?? 0) + 1;
+    }
+    setArquivosCount(cmap);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // ── Realtime subscription ─────────────────────────────────────────────────
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime:requerimento')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'requerimento' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            // Re-fetch para trazer o join com pessoa(full_name)
+            fetchData();
+          } else if (payload.eventType === 'UPDATE') {
+            fetchData();
+          } else if (payload.eventType === 'DELETE') {
+            setItems((prev) => prev.filter((i) => i.id !== (payload.old as Requerimento).id));
+            setArquivosCount((prev) => {
+              const copy = { ...prev };
+              delete copy[(payload.old as Requerimento).id];
+              return copy;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchData]);
+
   useEffect(() => { setCurrentPage(1); }, [search, filterResposta, filterStatus, filterDateStart, filterDateEnd]);
+
+  // ─── Auto-open form check (Vindo do Dashboard) ──────────────────────────────
+  useEffect(() => {
+    const autoAction = sessionStorage.getItem('autoOpenForm_requerimentos');
+    if (autoAction === 'create') {
+      sessionStorage.removeItem('autoOpenForm_requerimentos');
+      setEditingItem(null);
+      setShowForm(true);
+    }
+  }, []);
 
   // ── Stats ───────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
@@ -133,6 +213,126 @@ const RequerimentosScreen: React.FC = () => {
   const hasActiveFilters = filterResposta || filterStatus || filterDateStart || filterDateEnd || search;
   const clearFilters = () => { setSearch(''); setFilterResposta(''); setFilterStatus(''); setFilterDateStart(''); setFilterDateEnd(''); };
 
+  const openUpload = (item: Requerimento) => {
+    setUploadItem(item);
+    setUploadFiles([]);
+    setUploadError(null);
+    setUploadProgress('');
+  };
+
+  const openViewArquivos = async (item: Requerimento) => {
+    setViewArquivosItem(item);
+    setLoadingArquivos(true);
+    const { data } = await supabase
+      .from('requerimento_arquivos')
+      .select('*')
+      .eq('requerimento_id', item.id)
+      .order('created_at', { ascending: false });
+    setViewArquivos((data ?? []) as ArquivoReq[]);
+    setLoadingArquivos(false);
+  };
+
+  const handleDeleteArquivo = async (arquivoId: string, arquivoUrl: string) => {
+    setDeletingArquivoId(arquivoId);
+    // Extrair path relativo da URL pública
+    const url = new URL(arquivoUrl);
+    const pathParts = url.pathname.split('/requerimentos-pdf/');
+    const storagePath = pathParts[1] ?? '';
+    await supabase.storage.from('requerimentos-pdf').remove([storagePath]);
+    await supabase.from('requerimento_arquivos').delete().eq('id', arquivoId);
+    setDeletingArquivoId(null);
+    // atualizar a lista no modal
+    setViewArquivos(prev => prev.filter(a => a.id !== arquivoId));
+    // atualizar contador no grid
+    if (viewArquivosItem) {
+      setArquivosCount(prev => ({
+        ...prev,
+        [viewArquivosItem.id]: Math.max(0, (prev[viewArquivosItem.id] ?? 1) - 1),
+      }));
+    }
+  };
+
+  const handleUploadPDF = async () => {
+    if (uploadFiles.length === 0 || !uploadItem) return;
+    const invalid = uploadFiles.filter(f => f.type !== 'application/pdf');
+    if (invalid.length > 0) {
+      setUploadError(`Arquivo(s) inválido(s): ${invalid.map(f => f.name).join(', ')}. Apenas PDF é aceito.`);
+      return;
+    }
+    setUploading(true);
+    setUploadError(null);
+    const errors: string[] = [];
+    const inserted: ArquivoReq[] = [];
+    for (let i = 0; i < uploadFiles.length; i++) {
+      const file = uploadFiles[i];
+      setUploadProgress(`Enviando ${i + 1} de ${uploadFiles.length}: ${file.name}`);
+      const filePath = `${uploadItem.id}/${Date.now()}_${file.name}`;
+      const { error: storageErr } = await supabase.storage
+        .from('requerimentos-pdf')
+        .upload(filePath, file, { upsert: true });
+      if (storageErr) { errors.push(`${file.name}: ${storageErr.message}`); continue; }
+      const { data: { publicUrl } } = supabase.storage.from('requerimentos-pdf').getPublicUrl(filePath);
+      const { data: row, error: dbErr } = await supabase
+        .from('requerimento_arquivos')
+        .insert({ requerimento_id: uploadItem.id, nome_arquivo: file.name, arquivo_url: publicUrl, tamanho_bytes: file.size })
+        .select()
+        .single();
+      if (dbErr) { errors.push(`${file.name}: ${dbErr.message}`); continue; }
+      if (row) inserted.push(row as ArquivoReq);
+    }
+    setUploading(false);
+    setUploadProgress('');
+    if (errors.length > 0) {
+      setUploadError(`Erros: ${errors.join(' | ')}`);
+    } else {
+      setUploadItem(null);
+    }
+    // atualizar contagem
+    if (inserted.length > 0) {
+      const reqId = uploadItem.id;
+      setArquivosCount(prev => ({ ...prev, [reqId]: (prev[reqId] ?? 0) + inserted.length }));
+      showSuccess(`${inserted.length} arquivo(s) importado(s) com sucesso!`);
+    }
+  };
+
+  const generatePDF = () => {
+    const doc = new jsPDF('landscape');
+    
+    // Header do PDF
+    doc.setFontSize(16);
+    doc.setTextColor(40);
+    doc.text('Relatório de Requerimentos', 14, 15);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 22);
+    
+    const tableData = sorted.map(item => [
+      item.numero_requerimento,
+      fmtDate(item.data_sessao),
+      item.titulo,
+      item.resposta_recebida || '-',
+      item.status,
+      fmtDate(item.data_protocolo)
+    ]);
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['Nº', 'Data Sessão', 'Título', 'Resposta', 'Status', 'Data Protocolo']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [40, 100, 200] },
+      styles: { fontSize: 8 },
+      columnStyles: {
+        2: { cellWidth: 80 } // titulo mais largo
+      }
+    });
+
+    const pdfBlob = doc.output('blob');
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    window.open(pdfUrl, '_blank');
+  };
+
   if (showForm) {
     return (
       <div className="h-full">
@@ -160,12 +360,32 @@ const RequerimentosScreen: React.FC = () => {
             Gestão de requerimentos legislativos
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-        >
-          <Plus className="h-4 w-4 mr-2" /> Novo Requerimento
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={generatePDF}
+            className="flex items-center px-4 py-2.5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors shadow-sm"
+            title="Gerar PDF"
+          >
+            <Printer className="h-4 w-4 sm:mr-2 text-slate-500" /> 
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="flex items-center px-4 py-2.5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-70"
+            title="Atualizar registros"
+          >
+            <RefreshCw className={`h-4 w-4 sm:mr-2 ${loading ? 'animate-spin text-blue-500' : ''}`} /> 
+            <span className="hidden sm:inline">Atualizar</span>
+          </button>
+          <button
+            onClick={openCreate}
+            className="flex items-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+          >
+            <Plus className="h-4 w-4 sm:mr-2" /> 
+            <span className="hidden sm:inline">Novo Requerimento</span>
+          </button>
+        </div>
       </div>
 
       {/* Toast */}
@@ -350,6 +570,9 @@ const RequerimentosScreen: React.FC = () => {
                       )}
                     </th>
                   ))}
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide w-16">
+                    Anexo
+                  </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
                     Ações
                   </th>
@@ -373,7 +596,13 @@ const RequerimentosScreen: React.FC = () => {
                       {fmtDate(item.data_sessao)}
                     </td>
                     <td className="px-4 py-3 max-w-xs">
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2">{item.titulo}</p>
+                      <p 
+                        className="text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        onClick={() => setViewTituloItem(item)}
+                        title="Clique para ver o título completo"
+                      >
+                        {item.titulo}
+                      </p>
                     </td>
                     <td className="px-4 py-3">
                       {item.resposta_recebida ? (
@@ -387,14 +616,52 @@ const RequerimentosScreen: React.FC = () => {
                         {item.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
-                      {fmtDate(item.data_protocolo)}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex flex-col items-center justify-center w-max">
+                        <span className="text-[#3282B8] dark:text-[#4FB0E1] text-[15px] leading-tight mb-0.5">
+                          {fmtDate(item.data_protocolo)}
+                        </span>
+                        {item.data_protocolo && (() => {
+                          const dias = calcDiasProtocolo(item.data_protocolo);
+                          const colorClass = dias >= 15 
+                            ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                            : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400";
+                          return (
+                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold mt-0.5 ${colorClass}`}>
+                              Dias: {dias}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300">
                       {fmtDate(item.created_at?.split('T')[0])}
                     </td>
+                    {/* Coluna Anexo PDF */}
+                    <td className="px-4 py-3 text-center">
+                      {(arquivosCount[item.id] ?? 0) > 0 ? (
+                        <button
+                          onClick={() => openViewArquivos(item)}
+                          title={`${arquivosCount[item.id]} arquivo(s) anexado(s)`}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                        >
+                          <Paperclip className="h-4 w-4" />
+                          <span className="text-xs font-bold">{arquivosCount[item.id]}</span>
+                        </button>
+                      ) : (
+                        <span className="text-slate-300 dark:text-slate-700 text-xs select-none">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
+                        {/* Importar PDF(s) */}
+                        <button
+                          onClick={() => openUpload(item)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                          title="Importar PDF(s)"
+                        >
+                          <Upload className="h-4 w-4" />
+                        </button>
                         <button onClick={() => openEdit(item)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
                           <Pencil className="h-4 w-4" />
@@ -465,6 +732,227 @@ const RequerimentosScreen: React.FC = () => {
                 <button onClick={() => handleDelete(deleteId)}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors">
                   Excluir
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: Visualizar Título Inteiro */}
+      <AnimatePresence>
+        {viewTituloItem && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setViewTituloItem(null)}>
+            <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden max-w-md w-full"
+              onClick={e => e.stopPropagation()}>
+              
+              {/* Header estilo popup do sininho */}
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <h3 className="font-heading font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  Detalhes do Título
+                </h3>
+                <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold uppercase">
+                  Nº {viewTituloItem.numero_requerimento}
+                </span>
+              </div>
+              
+              {/* Conteúdo */}
+              <div className="p-5 max-h-[400px] overflow-y-auto">
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                  {viewTituloItem.titulo}
+                </p>
+              </div>
+              
+              {/* Rodapé/Botão */}
+              <div className="border-t border-slate-100 dark:border-slate-800">
+                <button 
+                  onClick={() => setViewTituloItem(null)}
+                  className="w-full p-3 bg-slate-50 dark:bg-slate-800/50 text-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: Visualizar Arquivos */}
+      <AnimatePresence>
+        {viewArquivosItem && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setViewArquivosItem(null)}>
+            <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-xl"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-xl">
+                  <Paperclip className="h-5 w-5 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-heading font-bold text-slate-900 dark:text-white">Arquivos Anexados</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Requerimento: <span className="font-semibold">{viewArquivosItem.numero_requerimento}</span></p>
+                </div>
+                <button onClick={() => setViewArquivosItem(null)} className="ml-auto p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {loadingArquivos ? (
+                <div className="flex items-center justify-center py-8 text-slate-400">
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" /> Carregando...
+                </div>
+              ) : viewArquivos.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">Nenhum arquivo encontrado.</p>
+              ) : (
+                <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {viewArquivos.map(arq => (
+                    <li key={arq.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                      <FileText className="h-5 w-5 text-red-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{arq.nome_arquivo}</p>
+                        {arq.tamanho_bytes && (
+                          <p className="text-xs text-slate-400">{(arq.tamanho_bytes / 1024 / 1024).toFixed(2)} MB · {fmtDate(arq.created_at.split('T')[0])}</p>
+                        )}
+                      </div>
+                      <a href={arq.arquivo_url} target="_blank" rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" title="Abrir PDF">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                      <button
+                        onClick={() => handleDeleteArquivo(arq.id, arq.arquivo_url)}
+                        disabled={deletingArquivoId === arq.id}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        title="Remover arquivo"
+                      >
+                        {deletingArquivoId === arq.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex justify-end mt-5">
+                <button
+                  onClick={() => { setViewArquivosItem(null); openUpload(viewArquivosItem!); }}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Upload className="h-4 w-4" /> Adicionar mais arquivos
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: Upload PDF (múltiplos) */}
+      <AnimatePresence>
+        {uploadItem && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => !uploading && setUploadItem(null)}>
+            <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+              className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-xl"
+              onClick={e => e.stopPropagation()}>
+
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                  <Upload className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-heading font-bold text-slate-900 dark:text-white">Importar PDF(s)</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Requerimento: <span className="font-semibold">{uploadItem.numero_requerimento}</span></p>
+                </div>
+              </div>
+
+              {/* Aviso */}
+              <div className="flex items-start gap-2 p-3 mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  <span className="font-semibold">Atenção:</span> Apenas arquivos no formato <span className="font-semibold">PDF</span> são aceitos. Tamanho máximo por arquivo: <span className="font-semibold">10 MB</span>. Você pode selecionar <span className="font-semibold">múltiplos arquivos</span> de uma vez.
+                </p>
+              </div>
+
+              {/* Área de seleção */}
+              <label
+                htmlFor="pdf-upload-input"
+                className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-all
+                  ${ uploadFiles.length > 0
+                    ? 'border-purple-400 bg-purple-50 dark:bg-purple-900/20'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 bg-slate-50 dark:bg-slate-800/60'
+                  }`}
+              >
+                <Upload className="h-7 w-7 text-slate-300 dark:text-slate-600 mb-1" />
+                <span className="text-sm text-slate-500 dark:text-slate-400">Clique para selecionar PDF(s)</span>
+                <span className="text-xs text-slate-400">Seleção múltipla permitida</span>
+                <input
+                  id="pdf-upload-input"
+                  type="file"
+                  accept="application/pdf"
+                  multiple
+                  className="hidden"
+                  onChange={e => {
+                    const files = Array.from(e.target.files ?? []) as File[];
+                    setUploadFiles(prev => {
+                      const names = new Set(prev.map(f => f.name));
+                      return [...prev, ...files.filter(f => !names.has(f.name))];
+                    });
+                    setUploadError(null);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+
+              {/* Lista de arquivos selecionados */}
+              {uploadFiles.length > 0 && (
+                <ul className="mt-3 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {uploadFiles.map((f, idx) => (
+                    <li key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700">
+                      <FileText className="h-4 w-4 text-red-500 shrink-0" />
+                      <span className="text-xs text-slate-700 dark:text-slate-300 flex-1 truncate">{f.name}</span>
+                      <span className="text-xs text-slate-400 shrink-0">{(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                      <button onClick={() => setUploadFiles(prev => prev.filter((_, i) => i !== idx))}
+                        className="p-0.5 rounded text-slate-300 hover:text-red-500 transition-colors">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Progresso */}
+              {uploading && uploadProgress && (
+                <div className="flex items-center gap-2 mt-3 p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                  <Loader2 className="h-4 w-4 text-purple-500 animate-spin shrink-0" />
+                  <p className="text-xs text-purple-700 dark:text-purple-400">{uploadProgress}</p>
+                </div>
+              )}
+
+              {/* Erro */}
+              {uploadError && (
+                <div className="flex items-center gap-2 mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                  <p className="text-xs text-red-700 dark:text-red-400">{uploadError}</p>
+                </div>
+              )}
+
+              {/* Ações */}
+              <div className="flex gap-3 justify-end mt-5">
+                <button onClick={() => setUploadItem(null)} disabled={uploading}
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-40">
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleUploadPDF}
+                  disabled={uploadFiles.length === 0 || uploading}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploading ? 'Enviando...' : `Importar ${uploadFiles.length > 0 ? uploadFiles.length + ' arquivo(s)' : ''}`}
                 </button>
               </div>
             </motion.div>

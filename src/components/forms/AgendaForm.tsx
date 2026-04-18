@@ -137,10 +137,10 @@ const AgendaForm: React.FC<AgendaFormProps> = ({ initialData, mode, onClose, onS
         </button>
         <div>
           <h1 className="text-2xl font-heading font-bold text-slate-900 dark:text-white">
-            {mode === 'create' ? 'Novo Cadastro' : 'Editar Cadastro'}
+            {mode === 'create' ? 'Novo Compromisso' : 'Editar Compromisso'}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Preencha as informações do novo contato
+            Preencha as informações do compromisso
           </p>
         </div>
       </div>

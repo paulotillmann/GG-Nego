@@ -11,9 +11,12 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
     "framer-motion": "^12.23.24",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.554.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-grab": "^0.1.32"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

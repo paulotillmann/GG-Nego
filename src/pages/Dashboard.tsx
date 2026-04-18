@@ -152,8 +152,22 @@ const Dashboard: React.FC = () => {
     };
 
     fetchDashboardData();
-  }, [calYear, calMonth]);
 
+    // Inscreve no Realtime do Supabase para atualizar Dashboard em tempo real 
+    const subscription = supabase
+      .channel('dashboard_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agenda' }, () => {
+        fetchDashboardData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pessoa' }, () => {
+        fetchDashboardData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [calYear, calMonth]);
   // ─── Navigation ─────────────────────────────────────────────────────────────
   const navigateTo = (menuId: string, action?: string) => {
     if (action) {

@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { 
   LayoutDashboard, Users, CalendarDays, Laptop, FileText, StickyNote,
   Search, Bell, Plus, Moon, Sun, LogOut, Settings,
-  Shield, Puzzle, UsersRound, ChevronDown, ChevronRight, ScrollText,
+  Shield, Puzzle, UsersRound, ChevronDown, ChevronRight, ScrollText, Clock,
 } from 'lucide-react';
 import logoBranca2 from '../assets/logos/logo_oficial_branca2.png';
 import logoNegoOficial from '../assets/logos/logo_nego_oficial.png';
@@ -17,6 +17,7 @@ import PeopleScreen     from '../pages/PeopleScreen';
 import ActivityLogsScreen from '../pages/admin/ActivityLogsScreen';
 import AgendaScreen     from '../pages/AgendaScreen';
 import RequerimentosScreen from '../pages/RequerimentosScreen';
+import AtendimentoScreen from '../pages/AtendimentoScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DashboardLayoutProps {
@@ -41,17 +42,34 @@ const CONFIG_ITEMS = [
   { id: 'config/logs',      label: 'Logs de Atividade',    icon: ScrollText },
 ];
 
+// ─── Error Boundary ─────────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
+  constructor(props: any) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
+  render() { 
+    if (this.state.hasError) return <div className="p-8 text-red-500 font-mono">Erro de Renderização: {String(this.state.error?.message ?? this.state.error)}</div>; 
+    return this.props.children; 
+  }
+}
+
 // ─── Content Router ───────────────────────────────────────────────────────────
 const renderContent = (activeMenu: string, children: React.ReactNode) => {
-  if (activeMenu === 'perfil')           return <ProfileScreen />;
-  if (activeMenu === 'pessoas')          return <PeopleScreen />;
-  if (activeMenu === 'agenda')           return <AgendaScreen />;
-  if (activeMenu === 'requerimentos')    return <RequerimentosScreen />;
-  if (activeMenu === 'config/perfis')    return <AccessProfiles />;
-  if (activeMenu === 'config/modulos')   return <ModulesScreen />;
-  if (activeMenu === 'config/usuarios')  return <UsersManagement />;
-  if (activeMenu === 'config/logs')      return <ActivityLogsScreen />;
-  return children;
+  return (
+    <ErrorBoundary>
+      {(() => {
+        if (activeMenu === 'perfil')           return <ProfileScreen />;
+        if (activeMenu === 'pessoas')          return <PeopleScreen />;
+        if (activeMenu === 'agenda')           return <AgendaScreen />;
+        if (activeMenu === 'auto-atendimento') return <AtendimentoScreen />;
+        if (activeMenu === 'requerimentos')    return <RequerimentosScreen />;
+        if (activeMenu === 'config/perfis')    return <AccessProfiles />;
+        if (activeMenu === 'config/modulos')   return <ModulesScreen />;
+        if (activeMenu === 'config/usuarios')  return <UsersManagement />;
+        if (activeMenu === 'config/logs')      return <ActivityLogsScreen />;
+        return children;
+      })()}
+    </ErrorBoundary>
+  );
 };
 
 // ─── Sidebar Item ─────────────────────────────────────────────────────────────
@@ -92,6 +110,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
   const [agendaBadge, setAgendaBadge]     = useState(0);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const isConfigActive = activeMenu.startsWith('config/');
 
@@ -239,28 +263,19 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
         {/* Header */}
         <header className="h-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 shrink-0 transition-colors duration-300">
 
-          {/* Search */}
-          <div className="flex-1 max-w-xl">
-            <div className="relative group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-              <input
-                type="text"
-                placeholder="Buscar requerimentos, pessoas, processos..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-slate-900 dark:text-slate-100 placeholder-slate-400"
-              />
-            </div>
-          </div>
+          {/* Spacer para alinhar os itens à direita */}
+          <div className="flex-1" />
 
           {/* Actions */}
-          <div className="flex items-center space-x-4 ml-6">
-            <button className="hidden md:flex items-center px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
-              <FileText className="h-4 w-4 mr-2" /> Gerar Relatório
-            </button>
-            <button className="hidden md:flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm shadow-blue-500/20">
-              <Plus className="h-4 w-4 mr-2" /> Novo Atendimento
-            </button>
+          <div className="flex items-center space-x-4">
 
-            <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-2" />
+            {/* Relógio Digital */}
+            <div className="hidden sm:flex items-center space-x-2 mr-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/50 rounded-lg">
+              <Clock className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+              <span className="text-sm font-bold font-heading text-slate-700 dark:text-slate-200 tracking-wider tabular-nums">
+                {currentTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            </div>
 
             <button onClick={toggleDarkMode} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
               {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
