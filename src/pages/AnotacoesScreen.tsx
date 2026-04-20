@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, X, Search, Clock, CalendarDays, Edit2, Trash2, ChevronLeft, ChevronRight, StickyNote } from 'lucide-react';
@@ -10,17 +10,7 @@ const STATUS_COLORS: Record<string, string> = {
   'concluído': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
 };
 
-// Gerador dos dias -3 até +3
-const generateDays = () => {
-  const days = [];
-  for (let i = -3; i <= 3; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    d.setHours(0, 0, 0, 0); // Zera hora para poder filtrar range
-    days.push(d);
-  }
-  return days;
-};
+// (A geração estática foi substituída por useMemo dinâmico)
 
 // Funções de formatação nativas para não depender de libs
 const formatDateHeader = (date: Date) => {
@@ -42,7 +32,39 @@ export default function AnotacoesScreen() {
   const { user } = useAuth();
   const [anotacoes, setAnotacoes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const columns = generateDays();
+
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 2);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  });
+  
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  });
+
+  const columns = useMemo(() => {
+    const days = [];
+    if (!startDate || !endDate) return [];
+    
+    // Tratamento de timezone seguro
+    const [sy, sm, sd] = startDate.split('-').map(Number);
+    const start = new Date(sy, sm - 1, sd);
+    
+    const [ey, em, ed] = endDate.split('-').map(Number);
+    const end = new Date(ey, em - 1, ed);
+    
+    let current = start;
+    let count = 0;
+    while (current <= end && count < 30) {
+      days.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+      count++;
+    }
+    return days;
+  }, [startDate, endDate]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -133,10 +155,12 @@ export default function AnotacoesScreen() {
     if (!user) return;
     setLoading(true);
 
+    if (columns.length === 0) return;
+
     const startBoundary = new Date(columns[0]);
     startBoundary.setHours(0, 0, 0, 0);
 
-    const endBoundary = new Date(columns[6]);
+    const endBoundary = new Date(columns[columns.length - 1]);
     endBoundary.setHours(23, 59, 59, 999);
 
     const { data } = await supabase
@@ -145,7 +169,7 @@ export default function AnotacoesScreen() {
       .eq('user_id', user.id)
       .gte('data_hora', startBoundary.toISOString())
       .lte('data_hora', endBoundary.toISOString())
-      .order('data_hora', { ascending: true });
+      .order('data_hora', { ascending: false });
 
     setAnotacoes(data || []);
     setLoading(false);
@@ -153,7 +177,10 @@ export default function AnotacoesScreen() {
 
   useEffect(() => {
     fetchData();
+  }, [user, columns]);
 
+  useEffect(() => {
+    if (!user) return;
     // Setup Realtime
     const channel = supabase.channel('anotacoes_changes')
       .on(
@@ -224,13 +251,31 @@ export default function AnotacoesScreen() {
           </h1>
           <p className="text-slate-500 dark:text-slate-400">Gerenciamento estilo Kanban</p>
         </div>
-        <button 
-          onClick={() => openNewModal()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors font-medium"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Nova Anotação
-        </button>
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 bg-white dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
+            <CalendarDays className="w-4 h-4 text-slate-400" />
+            <input 
+              type="date" 
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="bg-transparent text-sm font-medium text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
+            />
+            <span className="text-slate-400 text-sm">até</span>
+            <input 
+              type="date" 
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="bg-transparent text-sm font-medium text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
+            />
+          </div>
+          <button 
+            onClick={() => openNewModal()}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors font-medium"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nova Anotação
+          </button>
+        </div>
       </div>
 
       {/* Kanban Board Container (com setas de rolagem) */}
@@ -253,7 +298,10 @@ export default function AnotacoesScreen() {
           <div className="flex gap-4 h-full w-max mx-auto items-start">
           
           {columns.map((colDate, idx) => {
-            const isToday = idx === 3; // O meio (0, 1, 2, [3], 4, 5, 6)
+            const today = new Date();
+            const isToday = colDate.getDate() === today.getDate() && 
+                            colDate.getMonth() === today.getMonth() && 
+                            colDate.getFullYear() === today.getFullYear();
             
             // Filtramos as notas que pertencem a este dia específico
             const colStart = new Date(colDate);
