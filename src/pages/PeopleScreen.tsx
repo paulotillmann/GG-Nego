@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Loader2, CheckCircle,
   Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown,
-  Users, ShieldCheck, Building2, Briefcase
+  Users, ShieldCheck, Building2, Briefcase, Tag, FileText
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { maskPhone } from '../utils/validators';
 import PeopleForm, { Pessoa, PERSON_TYPES } from '../components/forms/PeopleForm';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const PeopleScreen: React.FC = () => {
   const [people, setPeople] = useState<Pessoa[]>([]);
@@ -213,6 +215,146 @@ const PeopleScreen: React.FC = () => {
     return `Página ${currentPage} de ${totalPages} · Mostrar ${start}-${end} de ${filtered.length} registros`;
   };
 
+  const generateLabels = () => {
+    if (sorted.length === 0) {
+      alert("Nenhum registro encontrado para gerar etiquetas.");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const labelWidth = 100;
+    const labelHeight = 50;
+    const columns = 2;
+    const rows = 5;
+    const labelsPerPage = columns * rows;
+    
+    // A4 dimensions: 210 x 297 mm
+    const marginLeft = (210 - (labelWidth * columns)) / 2;
+    const marginTop = (297 - (labelHeight * rows)) / 2;
+    
+    sorted.forEach((person, index) => {
+      if (index > 0 && index % labelsPerPage === 0) {
+        doc.addPage();
+      }
+      
+      const pageIndex = index % labelsPerPage;
+      const col = pageIndex % columns;
+      const row = Math.floor(pageIndex / columns);
+      
+      const x = marginLeft + (col * labelWidth);
+      const y = marginTop + (row * labelHeight);
+      
+      const padding = 5;
+      const innerX = x + padding;
+      let currentY = y + padding + 4;
+      
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      const nameText = doc.splitTextToSize((person.full_name || '').toUpperCase(), labelWidth - 2 * padding);
+      doc.text(nameText, innerX, currentY);
+      currentY += (nameText.length * 4.5);
+      
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      
+      let addressLine = person.address || '';
+      if (person.neighborhood) addressLine += ` - ${person.neighborhood}`;
+      if (addressLine) {
+         const addressWrapped = doc.splitTextToSize(addressLine, labelWidth - 2 * padding);
+         doc.text(addressWrapped, innerX, currentY);
+         currentY += (addressWrapped.length * 3.5);
+      }
+      
+      let cityLine = person.city || '';
+      if (person.cep) cityLine += ` | CEP: ${person.cep}`;
+      if (cityLine) {
+         doc.text(cityLine, innerX, currentY);
+      }
+    });
+
+    const pdfBlob = doc.output('blob');
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    window.open(pdfUrl, '_blank');
+  };
+
+  const generateReport = () => {
+    if (sorted.length === 0) {
+      alert("Nenhum registro encontrado para gerar o relatório.");
+      return;
+    }
+
+    const doc = new jsPDF('landscape', 'mm', 'a4');
+    
+    // Filters Info
+    const filterTexts = [];
+    if (search) filterTexts.push(`Busca: "${search}"`);
+    if (filterType) filterTexts.push(`Tipo: ${filterType}`);
+    if (filterCity) filterTexts.push(`Cidade: ${filterCity}`);
+    if (filterNeighborhood) filterTexts.push(`Bairro: ${filterNeighborhood}`);
+    const filterString = filterTexts.length > 0 ? `Filtros aplicados - ${filterTexts.join(' | ')}` : 'Nenhum filtro aplicado (Todos os registros)';
+    
+    // Table
+    const tableData = sorted.map(p => [
+      p.full_name || '',
+      p.person_type || '',
+      p.phone ? maskPhone(p.phone) : '',
+      p.address || '',
+      p.neighborhood || '',
+      p.city || '',
+      formatDate(p.birth_date) || ''
+    ]);
+
+    autoTable(doc, {
+      startY: 32,
+      head: [['Nome / Razão Social', 'Tipo', 'Telefone', 'Endereço', 'Bairro', 'Cidade', 'Nascimento']],
+      body: tableData,
+      theme: 'striped',
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { top: 32, right: 14, bottom: 20, left: 14 },
+      didDrawPage: (data) => {
+        // Header on every page
+        doc.setTextColor(0);
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("RELAÇÃO DE PESSOAS E ENTIDADES", 14, 15);
+        
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text("GABINETE VEREADOR NEGO", 14, 21);
+        
+        doc.setFontSize(8);
+        doc.text(filterString, 14, 27);
+
+        // Footer on every page
+        let str = `Página ${doc.internal.getNumberOfPages()}`;
+        if (typeof doc.putTotalPages === 'function') {
+          str = str + ' de {total_pages_count_string}';
+        }
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(150);
+        const pageSize = doc.internal.pageSize;
+        const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+        doc.text(str, 14, pageHeight - 10);
+      }
+    });
+
+    if (typeof doc.putTotalPages === 'function') {
+      doc.putTotalPages('{total_pages_count_string}');
+    }
+
+    const pdfBlob = doc.output('blob');
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    window.open(pdfUrl, '_blank');
+  };
+
   // ── Stats ──────────────────────────────────────────────────────────────
   const stats = React.useMemo(() => {
     return {
@@ -256,7 +398,19 @@ const PeopleScreen: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={generateReport}
+            className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
+          >
+            <FileText className="h-4 w-4 mr-2" /> Relatório
+          </button>
+          <button
+            onClick={generateLabels}
+            className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
+          >
+            <Tag className="h-4 w-4 mr-2" /> Etiquetas
+          </button>
           <button
             onClick={openCreate}
             className="flex items-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"

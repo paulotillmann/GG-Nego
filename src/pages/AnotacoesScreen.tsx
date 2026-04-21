@@ -239,6 +239,55 @@ export default function AnotacoesScreen() {
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, note: any) => {
+    e.dataTransfer.setData('text/plain', note.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetDate: Date) => {
+    e.preventDefault();
+    const noteId = e.dataTransfer.getData('text/plain');
+    if (!noteId) return;
+
+    const note = anotacoes.find(n => n.id === noteId);
+    if (!note) return;
+
+    // Se estiver soltando no mesmo dia, ignora
+    const originalDate = new Date(note.data_hora);
+    if (
+      originalDate.getDate() === targetDate.getDate() &&
+      originalDate.getMonth() === targetDate.getMonth() &&
+      originalDate.getFullYear() === targetDate.getFullYear()
+    ) {
+      return;
+    }
+
+    const newDate = new Date(targetDate);
+    newDate.setHours(
+      originalDate.getHours(),
+      originalDate.getMinutes(),
+      originalDate.getSeconds(),
+      originalDate.getMilliseconds()
+    );
+
+    // Update state locally for immediate feedback
+    setAnotacoes(prev => prev.map(n => 
+      n.id === noteId ? { ...n, data_hora: newDate.toISOString() } : n
+    ));
+
+    try {
+      await supabase.from('anotacoes').update({ data_hora: newDate.toISOString() }).eq('id', noteId);
+    } catch (err) {
+      console.error(err);
+      fetchData(); // rollback in case of error
+    }
+  };
+
   return (
     <div className="h-full flex flex-col pt-4 px-[30px] pb-6 bg-[#f8fafc] dark:bg-[#0B1120] overflow-hidden">
       
@@ -343,7 +392,11 @@ export default function AnotacoesScreen() {
                 </div>
 
                 {/* Cards List */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                <div 
+                  className="flex-1 overflow-y-auto p-3 space-y-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, colDate)}
+                >
                   {dayNotes.length === 0 ? (
                     <div className="text-center py-6 text-slate-400 dark:text-slate-600 text-sm italic">
                       Nenhuma anotação
@@ -352,7 +405,9 @@ export default function AnotacoesScreen() {
                     dayNotes.map(note => (
                       <div 
                         key={note.id}
-                        className="group/card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow relative"
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, note)}
+                        className="group/card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow relative cursor-grab active:cursor-grabbing"
                       >
                        <div className="flex justify-between items-start mb-2">
                           <div className="flex items-center text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/50 px-2 py-1 rounded">
