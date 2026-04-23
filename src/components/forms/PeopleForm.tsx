@@ -170,6 +170,7 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
       ...form,
       cpf: cleanedCpf,
       cnpj: cleanedCnpj,
+      birth_date: form.birth_date ? form.birth_date : null,
       updated_at: new Date().toISOString()
     };
     delete payload.id;
