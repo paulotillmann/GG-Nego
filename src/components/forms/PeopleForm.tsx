@@ -11,6 +11,7 @@ export interface Pessoa {
   full_name: string;
   pronoun: string | null;
   address: string | null;
+  address_number: string | null;
   cep: string | null;
   neighborhood: string | null;
   city: string | null;
@@ -18,6 +19,7 @@ export interface Pessoa {
   longitude: number | null;
   housing_type: string | null;
   phone: string | null;
+  destino: string | null;
   birth_date: string | null;
   email: string | null;
   cpf: string | null;
@@ -30,14 +32,14 @@ export interface Pessoa {
   updated_at?: string;
 }
 
-export const PRONOMES = ['Sr.', 'Sra.', 'Dr.', 'Dra.', 'Prof.', 'Profa.', 'Vereador', 'Prefeito'];
+export const PRONOMES = ['Sr.', 'Sra.', 'Dr.', 'Dra.', 'Prof.', 'Profa.', 'Vereador', 'Prefeito', 'Exmo', 'Exma', 'Ilmo', 'Ilma'];
 export const HOUSING_TYPES = ['Própria', 'Alugada', 'Cedida', 'Financiada'];
 export const PERSON_TYPES = ['Pessoa', 'Autoridade', 'Entidade', 'Empresa'];
 
 export const DEFAULT_FORM: Partial<Pessoa> = {
-  person_type: 'Pessoa', full_name: '', pronoun: 'Sr.', address: '', cep: '', neighborhood: '', city: '',
+  person_type: 'Pessoa', full_name: '', pronoun: 'Sr.', address: '', address_number: '', cep: '', neighborhood: '', city: '',
   latitude: null, longitude: null,
-  housing_type: 'Própria', phone: '', birth_date: '', email: '',
+  housing_type: 'Própria', phone: '', destino: '', birth_date: '', email: '',
   cpf: '', cnpj: '', facebook_url: '', instagram_url: '', reference: '', notes: ''
 };
 
@@ -316,7 +318,7 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
               </div>
             )}
 
-            {/* Telefone / E-mail */}
+            {/* Telefone / Destino / E-mail */}
             <div className="col-span-1 md:col-span-6 lg:col-span-4">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Telefone</label>
               <input type="text" value={form.phone || ''} maxLength={15}
@@ -326,6 +328,12 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
             <div className="col-span-1 md:col-span-6 lg:col-span-8">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">E-mail</label>
               <input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })}
+                className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="col-span-1 md:col-span-12">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Destino</label>
+              <input type="text" value={form.destino || ''} onChange={e => setForm({ ...form, destino: e.target.value })}
+                placeholder="Ex: Secretaria de Saúde, Câmara Municipal..."
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
 
@@ -366,9 +374,17 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
             </div>
 
             {/* Logradouro */}
-            <div className="col-span-1 md:col-span-12 lg:col-span-9">
+            <div className="col-span-1 md:col-span-12 lg:col-span-7">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Logradouro / Endereço</label>
               <input type="text" value={form.address || ''} onChange={e => setForm({ ...form, address: e.target.value })}
+                className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            {/* Número */}
+            <div className="col-span-1 md:col-span-12 lg:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Número</label>
+              <input type="text" value={form.address_number || ''} onChange={e => setForm({ ...form, address_number: e.target.value })}
+                placeholder="S/N"
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
 
