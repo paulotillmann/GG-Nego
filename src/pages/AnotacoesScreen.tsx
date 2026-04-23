@@ -166,7 +166,6 @@ export default function AnotacoesScreen() {
     const { data } = await supabase
       .from('vw_anotacoes_com_contato')
       .select('*')
-      .eq('user_id', user.id)
       .gte('data_hora', startBoundary.toISOString())
       .lte('data_hora', endBoundary.toISOString())
       .order('data_hora', { ascending: false });
@@ -188,8 +187,7 @@ export default function AnotacoesScreen() {
         {
           event: '*',
           schema: 'public',
-          table: 'anotacoes',
-          filter: `user_id=eq.${user?.id}`
+          table: 'anotacoes'
         },
         () => {
           fetchData(); // Simplistic fast refetch on changes
