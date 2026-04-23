@@ -292,6 +292,14 @@ const PeopleScreen: React.FC = () => {
         currentY += (destinoText.length * 3.5);
       }
 
+      if (person.pronoun) {
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        const pronounText = doc.splitTextToSize(person.pronoun, labelWidth - 2 * padding);
+        doc.text(pronounText, innerX, currentY);
+        currentY += (pronounText.length * 3.5);
+      }
+
       doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       const nameText = doc.splitTextToSize((person.full_name || '').toUpperCase(), labelWidth - 2 * padding);
@@ -652,7 +660,7 @@ const PeopleScreen: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400 truncate max-w-[200px]">
-                      {p.address || '—'}
+                      {p.address ? `${p.address}${p.address_number ? `, ${p.address_number}` : ''}` : '—'}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
                       {p.neighborhood || '—'}
