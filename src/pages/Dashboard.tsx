@@ -230,7 +230,7 @@ const Dashboard: React.FC = () => {
           Olá, {firstName}
         </h1>
         <p className="mt-2 text-slate-500 dark:text-slate-400 font-sans">
-          Aqui está um panorama da base de dados do gabinete.
+          Panorama da base de dados do gabinete.
         </p>
       </div>
 

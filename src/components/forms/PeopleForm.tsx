@@ -77,21 +77,54 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
     setCepLoading(true);
     setCepError(null);
     try {
-      const res = await fetch(`https://cep.awesomeapi.com.br/json/${digits}`);
+      // 1. Busca na BrasilAPI
+      const res = await fetch(`https://brasilapi.com.br/api/cep/v2/${digits}`);
       if (!res.ok) throw new Error('CEP não encontrado');
       const data = await res.json();
 
-      if (data.status === 404 || data.code === 'not_found') {
-        throw new Error('CEP não encontrado');
+      let lat = data.location?.coordinates?.latitude ? parseFloat(data.location.coordinates.latitude) : null;
+      let lng = data.location?.coordinates?.longitude ? parseFloat(data.location.coordinates.longitude) : null;
+
+      // 2. Consulta Google Maps Geocoding se a chave estiver configurada
+      const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+      if (googleApiKey) {
+        try {
+          const addressQuery = `${data.street}, ${data.neighborhood}, ${data.city} - ${data.state}, Brasil, CEP: ${data.cep}`;
+          const googleRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addressQuery)}&key=${googleApiKey}`);
+          const googleData = await googleRes.json();
+          if (googleData.status === 'OK' && googleData.results.length > 0) {
+            lat = googleData.results[0].geometry.location.lat;
+            lng = googleData.results[0].geometry.location.lng;
+          }
+        } catch (e) {
+          console.warn("Falha no Google Maps", e);
+        }
+      }
+
+      // 3. Fallback: A BrasilAPI v2 frequentemente retorna coordenadas vazias.
+      // Neste caso (e caso o Google falhe/não exista), usamos a AwesomeAPI silenciosamente apenas para pegar a Lat/Lng.
+      if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
+        try {
+          const fallbackRes = await fetch(`https://cep.awesomeapi.com.br/json/${digits}`);
+          if (fallbackRes.ok) {
+            const fallbackData = await fallbackRes.json();
+            if (fallbackData.lat && fallbackData.lng) {
+              lat = parseFloat(fallbackData.lat);
+              lng = parseFloat(fallbackData.lng);
+            }
+          }
+        } catch (e) {
+          console.warn("Falha no fallback de coordenadas", e);
+        }
       }
 
       setForm(prev => ({
         ...prev,
-        address: data.address || prev.address,
-        neighborhood: data.district || prev.neighborhood,
+        address: data.street || prev.address,
+        neighborhood: data.neighborhood || prev.neighborhood,
         city: data.city && data.state ? `${data.city} - ${data.state}` : prev.city,
-        latitude: data.lat ? parseFloat(data.lat) : null,
-        longitude: data.lng ? parseFloat(data.lng) : null,
+        latitude: lat,
+        longitude: lng,
       }));
     } catch {
       setCepError('CEP não encontrado. Verifique e tente novamente.');
@@ -366,31 +399,35 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
 
-            {/* Latitude / Longitude (somente leitura) */}
+            {/* Latitude / Longitude (editáveis) */}
             <div className="col-span-1 md:col-span-6">
-              <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5" /> Latitude
               </label>
               <input
                 type="text"
                 value={form.latitude != null ? String(form.latitude) : ''}
-                readOnly
-                tabIndex={-1}
+                onChange={e => {
+                  const val = parseFloat(e.target.value.replace(',', '.'));
+                  setForm({ ...form, latitude: isNaN(val) ? null : val });
+                }}
                 placeholder="Preenchido via CEP"
-                className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed"
+                className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div className="col-span-1 md:col-span-6">
-              <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5" /> Longitude
               </label>
               <input
                 type="text"
                 value={form.longitude != null ? String(form.longitude) : ''}
-                readOnly
-                tabIndex={-1}
+                onChange={e => {
+                  const val = parseFloat(e.target.value.replace(',', '.'));
+                  setForm({ ...form, longitude: isNaN(val) ? null : val });
+                }}
                 placeholder="Preenchido via CEP"
-                className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-sm cursor-not-allowed"
+                className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
               />
             </div>
 

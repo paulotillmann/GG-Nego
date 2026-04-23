@@ -1,15 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, Plus, Loader2, CheckCircle,
+  Search, Plus, Loader2, CheckCircle, MapPin,
   Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown,
   Users, ShieldCheck, Building2, Briefcase, Tag, FileText
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { maskPhone } from '../utils/validators';
 import PeopleForm, { Pessoa, PERSON_TYPES } from '../components/forms/PeopleForm';
+import PeopleMapForm from '../components/forms/PeopleMapForm';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+const LABEL_SIZES = [
+  { id: '100x50', name: 'Padrão (100 x 50 mm)', width: 100, height: 50 },
+  { id: '6080', name: 'Pimaco 6080 (66,7 x 25,4 mm)', width: 66.7, height: 25.4 },
+  { id: '6283', name: 'Pimaco 6283 (101,6 x 50,8 mm)', width: 101.6, height: 50.8 },
+  { id: '6081', name: 'Pimaco 6081 (101,6 x 25,4 mm)', width: 101.6, height: 25.4 },
+  { id: '6187', name: 'Pimaco 6187 (44,45 x 12,7 mm)', width: 44.45, height: 12.7 },
+];
 
 const PeopleScreen: React.FC = () => {
   const [people, setPeople] = useState<Pessoa[]>([]);
@@ -30,6 +39,17 @@ const PeopleScreen: React.FC = () => {
   // Page mode state
   const [showForm, setShowForm] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Partial<Pessoa> | null>(null);
+
+  // Map state
+  const [showDemographicMap, setShowDemographicMap] = useState(false);
+
+  // Label Modal state
+  const [showLabelModal, setShowLabelModal] = useState(false);
+  const [labelConfig, setLabelConfig] = useState({
+    size: '100x50',
+    paper: 'a4',
+    orientation: 'portrait' as 'portrait' | 'landscape',
+  });
 
   // ─── Auto-open form check (Vindo do Dashboard) ──────────────────────────────
   useEffect(() => {
@@ -222,20 +242,30 @@ const PeopleScreen: React.FC = () => {
     }
 
     const doc = new jsPDF({
-      orientation: 'portrait',
+      orientation: labelConfig.orientation,
       unit: 'mm',
-      format: 'a4'
+      format: labelConfig.paper
     });
 
-    const labelWidth = 100;
-    const labelHeight = 50;
-    const columns = 2;
-    const rows = 5;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const selectedSize = LABEL_SIZES.find(s => s.id === labelConfig.size) || LABEL_SIZES[0];
+    const labelWidth = selectedSize.width;
+    const labelHeight = selectedSize.height;
+
+    const columns = Math.floor(pageWidth / labelWidth);
+    const rows = Math.floor(pageHeight / labelHeight);
+
+    if (columns === 0 || rows === 0) {
+      alert("O tamanho da etiqueta é maior que a página selecionada.");
+      return;
+    }
+
     const labelsPerPage = columns * rows;
     
-    // A4 dimensions: 210 x 297 mm
-    const marginLeft = (210 - (labelWidth * columns)) / 2;
-    const marginTop = (297 - (labelHeight * rows)) / 2;
+    const marginLeft = (pageWidth - (labelWidth * columns)) / 2;
+    const marginTop = (pageHeight - (labelHeight * rows)) / 2;
     
     sorted.forEach((person, index) => {
       if (index > 0 && index % labelsPerPage === 0) {
@@ -249,17 +279,17 @@ const PeopleScreen: React.FC = () => {
       const x = marginLeft + (col * labelWidth);
       const y = marginTop + (row * labelHeight);
       
-      const padding = 5;
+      const padding = 3;
       const innerX = x + padding;
       let currentY = y + padding + 4;
       
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       const nameText = doc.splitTextToSize((person.full_name || '').toUpperCase(), labelWidth - 2 * padding);
       doc.text(nameText, innerX, currentY);
-      currentY += (nameText.length * 4.5);
+      currentY += (nameText.length * 4.0);
       
-      doc.setFontSize(8);
+      doc.setFontSize(7);
       doc.setFont("helvetica", "normal");
       
       let addressLine = person.address || '';
@@ -267,19 +297,21 @@ const PeopleScreen: React.FC = () => {
       if (addressLine) {
          const addressWrapped = doc.splitTextToSize(addressLine, labelWidth - 2 * padding);
          doc.text(addressWrapped, innerX, currentY);
-         currentY += (addressWrapped.length * 3.5);
+         currentY += (addressWrapped.length * 3.0);
       }
       
       let cityLine = person.city || '';
       if (person.cep) cityLine += ` | CEP: ${person.cep}`;
       if (cityLine) {
-         doc.text(cityLine, innerX, currentY);
+         const cityWrapped = doc.splitTextToSize(cityLine, labelWidth - 2 * padding);
+         doc.text(cityWrapped, innerX, currentY);
       }
     });
 
     const pdfBlob = doc.output('blob');
     const pdfUrl = URL.createObjectURL(pdfBlob);
     window.open(pdfUrl, '_blank');
+    setShowLabelModal(false);
   };
 
   const generateReport = () => {
@@ -356,14 +388,17 @@ const PeopleScreen: React.FC = () => {
   };
 
   // ── Stats ──────────────────────────────────────────────────────────────
-  const stats = React.useMemo(() => {
-    return {
-      pessoa: people.filter(p => p.person_type === 'Pessoa').length,
-      autoridade: people.filter(p => p.person_type === 'Autoridade').length,
-      entidade: people.filter(p => p.person_type === 'Entidade').length,
-      empresa: people.filter(p => p.person_type === 'Empresa').length,
-    };
-  }, [people]);
+  const stats = {
+    pessoa: filtered.filter(p => p.person_type === 'Pessoa').length,
+    autoridade: filtered.filter(p => p.person_type === 'Autoridade').length,
+    entidade: filtered.filter(p => p.person_type === 'Entidade').length,
+    empresa: filtered.filter(p => p.person_type === 'Empresa').length,
+  };
+
+  // Se o mapa demográfico estiver ativo
+  if (showDemographicMap) {
+    return <PeopleMapForm people={filtered} onClose={() => setShowDemographicMap(false)} />;
+  }
 
   // Se o formulário estiver ativo, renderizamos ele (Modo Página).
   if (showForm) {
@@ -406,10 +441,16 @@ const PeopleScreen: React.FC = () => {
             <FileText className="h-4 w-4 mr-2" /> Relatório
           </button>
           <button
-            onClick={generateLabels}
+            onClick={() => setShowLabelModal(true)}
             className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
           >
             <Tag className="h-4 w-4 mr-2" /> Etiquetas
+          </button>
+          <button
+            onClick={() => setShowDemographicMap(true)}
+            className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
+          >
+            <MapPin className="h-4 w-4 mr-2" /> Mapa Demográfico
           </button>
           <button
             onClick={openCreate}
@@ -728,6 +769,86 @@ const PeopleScreen: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Modal de Configuração de Etiquetas */}
+      <AnimatePresence>
+        {showLabelModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Tag className="h-5 w-5 text-blue-600" />
+                  Configurar Etiquetas
+                </h3>
+                <button onClick={() => setShowLabelModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                  <Plus className="h-5 w-5 rotate-45" />
+                </button>
+              </div>
+              
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                    Tamanho da Etiqueta
+                  </label>
+                  <select
+                    value={labelConfig.size}
+                    onChange={(e) => setLabelConfig({ ...labelConfig, size: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {LABEL_SIZES.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                      Tamanho do Papel
+                    </label>
+                    <select
+                      value={labelConfig.paper}
+                      onChange={(e) => setLabelConfig({ ...labelConfig, paper: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="a4">A4</option>
+                      <option value="letter">Carta (Letter)</option>
+                      <option value="legal">Ofício (Legal)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                      Orientação
+                    </label>
+                    <select
+                      value={labelConfig.orientation}
+                      onChange={(e) => setLabelConfig({ ...labelConfig, orientation: e.target.value as 'portrait' | 'landscape' })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="portrait">Retrato</option>
+                      <option value="landscape">Paisagem</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button onClick={() => setShowLabelModal(false)} className="px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+                <button onClick={generateLabels} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                  <Tag className="h-4 w-4" />
+                  Imprimir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };
