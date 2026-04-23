@@ -14,18 +14,12 @@ const AppContent: React.FC = () => {
   const [authView, setAuthView] = useState<AuthView>('login');
   const [showSplash, setShowSplash] = useState(true);
 
-  // 1. Logo na inicialização mostramos a Splash Screen.
-  // Ela tem um timer interno de 3 segundos antes de chamar onComplete.
-  if (showSplash) {
-    return <SplashScreen onComplete={() => setShowSplash(false)} />;
-  }
-
-  // 2. Se o tempo da splash acabou mas a requisição de auth ainda está rolando (caso extremo)
+  // 1. Se ainda estiver carregando a auth, não mostramos nada (ou um loader mínimo) para não piscar a splash
   if (loading) {
     return null;
   }
 
-  // 2. Autenticado e perfil carregado → dashboard
+  // 2. Se estiver logado, ignora a splash e vai direto pro dashboard
   if (session) {
     if (!profileLoaded) {
       return (
@@ -44,7 +38,11 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // 3. Não autenticado → login ou registro
+  // 3. Não autenticado → mostra splash e depois login ou registro
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} />;
+  }
+
   if (authView === 'register') {
     return <RegisterScreen onBack={() => setAuthView('login')} />;
   }
