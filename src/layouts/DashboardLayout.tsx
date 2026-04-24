@@ -390,7 +390,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, onLogout })
               onClick={() => setActiveMenu('perfil')}
             >
               <img
-                src={profile?.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.full_name ?? 'User'}`}
+                src={profile?.avatar_url || `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${profile?.full_name || 'User'}`}
                 alt={profile?.full_name ?? 'Usuário'}
                 className="h-9 w-9 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 object-cover"
               />

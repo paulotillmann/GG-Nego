@@ -172,7 +172,7 @@ const ProfileScreen: React.FC = () => {
               <div className="flex justify-center -mt-16 mb-4">
                 <div className="relative group">
                   <img
-                    src={avatarPreview ?? profile?.avatar_url ?? `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.full_name ?? 'User'}`}
+                    src={avatarPreview || profile?.avatar_url || `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${profile?.full_name || 'User'}`}
                     alt={profile?.full_name ?? 'Usuário'}
                     className={`h-32 w-32 rounded-full border-4 border-white dark:border-slate-900 bg-slate-100 dark:bg-slate-800 object-cover ${isEditing ? 'opacity-80 group-hover:opacity-50 transition-opacity' : ''}`}
                   />
