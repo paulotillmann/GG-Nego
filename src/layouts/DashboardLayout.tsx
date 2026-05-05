@@ -44,12 +44,16 @@ const CONFIG_ITEMS = [
 ];
 
 // ─── Error Boundary ─────────────────────────────────────────────────────────────
-class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
-  constructor(props: any) { super(props); this.state = { hasError: false, error: null }; }
+class ErrorBoundary extends React.Component<any, any> {
+  constructor(props: any) { 
+    super(props); 
+    (this as any).state = { hasError: false, error: null }; 
+  }
   static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
   render() { 
-    if (this.state.hasError) return <div className="p-8 text-red-500 font-mono">Erro de Renderização: {String(this.state.error?.message ?? this.state.error)}</div>; 
-    return this.props.children; 
+    const self = this as any;
+    if (self.state.hasError) return <div className="p-8 text-red-500 font-mono">Erro de Renderização: {String(self.state.error?.message ?? self.state.error)}</div>; 
+    return self.props.children; 
   }
 }
 

@@ -384,7 +384,7 @@ const PeopleScreen: React.FC = () => {
         doc.text(filterString, 14, 27);
 
         // Footer on every page
-        let str = `Página ${doc.internal.getNumberOfPages()}`;
+        let str = `Página ${(doc.internal as any).getNumberOfPages()}`;
         if (typeof doc.putTotalPages === 'function') {
           str = str + ' de {total_pages_count_string}';
         }
@@ -392,7 +392,7 @@ const PeopleScreen: React.FC = () => {
         doc.setFont("helvetica", "normal");
         doc.setTextColor(150);
         const pageSize = doc.internal.pageSize;
-        const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+        const pageHeight = pageSize.height ? pageSize.height : (pageSize as any).getHeight();
         doc.text(str, 14, pageHeight - 10);
       }
     });
