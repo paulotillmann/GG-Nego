@@ -3,6 +3,8 @@ import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin }
 import { supabase } from '../../lib/supabase';
 import { validateCPF, validateCNPJ, maskCPF, maskCNPJ, maskPhone, maskCEP } from '../../utils/validators';
 import DependentesSection from './DependentesSection';
+import ServicosSection from './ServicosSection';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ─── Tipos Exportados ─────────────────────────────────────────────────────────
 export interface Pessoa {
@@ -30,6 +32,8 @@ export interface Pessoa {
   notes: string | null;
   created_at: string;
   updated_at?: string;
+  user_id?: string | null;
+  profiles?: { full_name: string | null } | null;
 }
 
 export const PRONOMES = ['Sr.', 'Sra.', 'Dr.', 'Dra.', 'Prof.', 'Profa.', 'Vereador', 'Prefeito', 'Exmo', 'Exma', 'Ilmo', 'Ilma'];
@@ -53,6 +57,7 @@ interface PeopleFormProps {
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onSuccess }) => {
+  const { profile, user } = useAuth();
   const [form, setForm] = useState<Partial<Pessoa>>(initialData || DEFAULT_FORM);
   const [formType, setFormType] = useState<'PF' | 'PJ'>(initialData?.cnpj ? 'PJ' : 'PF');
   const [saving, setSaving] = useState(false);
@@ -175,6 +180,11 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
     };
     delete payload.id;
     delete payload.created_at;
+    delete payload.profiles;
+
+    if (mode === 'create') {
+      payload.user_id = user?.id || null;
+    }
 
     if (mode === 'edit' && initialData?.id) {
       // ── Edição: salva e chama onSuccess normalmente ──────────────────────────
@@ -487,12 +497,31 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
             disabled={!dependentesEnabled}
           />
         </div>
+
+        {/* ── Seção de Serviços ── */}
+        <div className="max-w-4xl mt-2">
+          <hr className="border-slate-100 dark:border-slate-800 mb-0" />
+          <ServicosSection
+            pessoaId={pessoaId}
+            disabled={!dependentesEnabled}
+          />
+        </div>
       </div>
 
       {/* ── Footer fixo com Botões de Ação ─────────────────────────────────────── */}
-      <div className="p-6 border-t border-slate-200 dark:border-slate-800 shrink-0 flex items-center justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/30 rounded-b-2xl">
+      <div className="p-6 border-t border-slate-200 dark:border-slate-800 shrink-0 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30 rounded-b-2xl">
 
-        {/* Botão Cancelar / Concluir */}
+        {/* Usuário que cadastrou */}
+        <div className="text-base text-slate-500 dark:text-slate-400 font-medium">
+          {mode === 'create' && profile?.full_name ? (
+            <span>Cadastrado por: <strong className="text-slate-700 dark:text-slate-300">{profile.full_name}</strong></span>
+          ) : mode === 'edit' && form.profiles?.full_name ? (
+            <span>Cadastrado por: <strong className="text-slate-700 dark:text-slate-300">{form.profiles.full_name}</strong></span>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Botão Cancelar / Concluir */}
         {dependentesEnabled && mode === 'create' ? (
           <button
             type="button"
@@ -525,6 +554,7 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
             }
           </button>
         )}
+        </div>
       </div>
     </div>
   );

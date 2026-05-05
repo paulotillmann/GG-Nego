@@ -73,7 +73,7 @@ const PeopleScreen: React.FC = () => {
   // ── Fetch ──────────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('pessoa').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('pessoa').select('*, profiles(full_name)').order('created_at', { ascending: false });
     setPeople((data ?? []) as Pessoa[]);
     setLoading(false);
   }, []);
@@ -92,7 +92,7 @@ const PeopleScreen: React.FC = () => {
             setPeople((prev) => [payload.new as Pessoa, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
             setPeople((prev) =>
-              prev.map((p) => (p.id === (payload.new as Pessoa).id ? (payload.new as Pessoa) : p))
+              prev.map((p) => (p.id === (payload.new as Pessoa).id ? { ...(payload.new as Pessoa), profiles: p.profiles } : p))
             );
           } else if (payload.eventType === 'DELETE') {
             setPeople((prev) => prev.filter((p) => p.id !== (payload.old as Pessoa).id));
@@ -356,12 +356,13 @@ const PeopleScreen: React.FC = () => {
       p.address || '',
       p.neighborhood || '',
       p.city || '',
-      formatDate(p.birth_date) || ''
+      formatDate(p.birth_date) || '',
+      p.profiles?.full_name || '—'
     ]);
 
     autoTable(doc, {
       startY: 32,
-      head: [['Nome / Razão Social', 'Tipo', 'Telefone', 'Endereço', 'Bairro', 'Cidade', 'Nascimento']],
+      head: [['Nome / Razão Social', 'Tipo', 'Telefone', 'Endereço', 'Bairro', 'Cidade', 'Nascimento', 'Cadastrado por']],
       body: tableData,
       theme: 'striped',
       styles: { fontSize: 8, cellPadding: 2 },
@@ -622,19 +623,20 @@ const PeopleScreen: React.FC = () => {
                 </th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Telefone</th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nascimento</th>
+                <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden lg:table-cell">Cadastrado por</th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Ação</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-20 text-center">
+                  <td colSpan={9} className="py-20 text-center">
                     <Loader2 className="h-8 w-8 text-blue-600 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
+                  <td colSpan={9} className="py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
                     Nenhum registro encontrado.
                   </td>
                 </tr>
@@ -673,6 +675,9 @@ const PeopleScreen: React.FC = () => {
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
                       {formatDate(p.birth_date)}
+                    </td>
+                    <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400 hidden lg:table-cell">
+                      {p.profiles?.full_name || '—'}
                     </td>
                     <td className="py-4 px-6 text-right space-x-2">
                        <button
