@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin } from 'lucide-react';
+import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { validateCPF, validateCNPJ, maskCPF, maskCNPJ, maskPhone, maskCEP } from '../../utils/validators';
 import DependentesSection from './DependentesSection';
@@ -21,10 +22,10 @@ export interface Pessoa {
   longitude: number | null;
   housing_type: string | null;
   phone: string | null;
+  telefone_extra: string | null;
   destino: string | null;
   birth_date: string | null;
   email: string | null;
-  cpf: string | null;
   cnpj: string | null;
   facebook_url: string | null;
   instagram_url: string | null;
@@ -36,15 +37,21 @@ export interface Pessoa {
   profiles?: { full_name: string | null } | null;
 }
 
-export const PRONOMES = ['Sr.', 'Sra.', 'Dr.', 'Dra.', 'Prof.', 'Profa.', 'Vereador', 'Prefeito', 'Exmo', 'Exma', 'Ilmo', 'Ilma'];
+export const PRONOMES = [
+  'Sr.', 'Sra.', 'Dr.', 'Dra.', 'Prof.', 'Profa.', 'Vereador', 'Prefeito', 'Exmo', 'Exma', 'Ilmo', 'Ilma',
+  'Exmo(a) Senhor(a)', 'Exmo Sr. Prefeito Municipal', 'Exmo(a) Sr.(a) Deputado(a) Federal', 'Exmo(a) Sr.(a) Deputado(a) Estadual',
+  'Aos amigos do', 'Aos amigos da', 'Aos funcionários', 'Ao amigo', 'À amiga',
+  'Ilustríssimo(a) Senhor(a)', 'Ilustríssimo(a) Senhor(a) Dr.(a)', 'Aos(as) sevidores(as)', 'Aos(as) proprietários(as) e funcionários(as)',
+  'Ao(s) Diretor(es)', 'À Diretora'
+];
 export const HOUSING_TYPES = ['Própria', 'Alugada', 'Cedida', 'Financiada'];
 export const PERSON_TYPES = ['Pessoa', 'Autoridade', 'Entidade', 'Empresa'];
 
 export const DEFAULT_FORM: Partial<Pessoa> = {
   person_type: 'Pessoa', full_name: '', pronoun: 'Sr.', address: '', address_number: '', cep: '', neighborhood: '', city: '',
   latitude: null, longitude: null,
-  housing_type: 'Própria', phone: '', destino: '', birth_date: '', email: '',
-  cpf: '', cnpj: '', facebook_url: '', instagram_url: '', reference: '', notes: ''
+  housing_type: 'Própria', phone: '', telefone_extra: '', destino: '', birth_date: '', email: '',
+  cnpj: '', facebook_url: '', instagram_url: '', reference: '', notes: ''
 };
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -58,6 +65,7 @@ interface PeopleFormProps {
 // ─── Componente ───────────────────────────────────────────────────────────────
 const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onSuccess }) => {
   const { profile, user } = useAuth();
+  const [isOpenPronoun, setIsOpenPronoun] = useState(false);
   const [form, setForm] = useState<Partial<Pessoa>>(initialData || DEFAULT_FORM);
   const [formType, setFormType] = useState<'PF' | 'PJ'>(initialData?.cnpj ? 'PJ' : 'PF');
   const [saving, setSaving] = useState(false);
@@ -158,14 +166,11 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
 
     if (!form.full_name?.trim()) { setError('Nome completo é obrigatório.'); return; }
 
-    let cleanedCpf = form.cpf?.replace(/\D/g, '') || null;
     let cleanedCnpj = form.cnpj?.replace(/\D/g, '') || null;
 
     if (formType === 'PF') {
       cleanedCnpj = null;
-      if (cleanedCpf && !validateCPF(cleanedCpf)) { setError('O CPF informado é inválido.'); return; }
     } else {
-      cleanedCpf = null;
       if (cleanedCnpj && !validateCNPJ(cleanedCnpj)) { setError('O CNPJ informado é inválido.'); return; }
     }
 
@@ -173,7 +178,6 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
 
     const payload = {
       ...form,
-      cpf: cleanedCpf,
       cnpj: cleanedCnpj,
       birth_date: form.birth_date ? form.birth_date : null,
       updated_at: new Date().toISOString()
@@ -285,8 +289,60 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
               </select>
             </div>
 
-            {/* Nome */}
-            <div className="col-span-1 md:col-span-12 lg:col-span-8">
+            {/* Tratamento e Nome */}
+            <div className="col-span-1 md:col-span-3 lg:col-span-3 relative">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tratamento</label>
+              
+              {/* Custom Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsOpenPronoun(!isOpenPronoun)}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 transition-all"
+                >
+                  <span className="truncate">{form.pronoun || 'Selecione...'}</span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpenPronoun ? 'rotate-180' : ''}`} />
+                </button>
+
+                <AnimatePresence>
+                  {isOpenPronoun && (
+                    <>
+                      {/* Overlay para fechar ao clicar fora */}
+                      <div className="fixed inset-0 z-[60]" onClick={() => setIsOpenPronoun(false)} />
+                      
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-[70] overflow-hidden"
+                      >
+                        <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
+                          {PRONOMES.map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => {
+                                setForm({ ...form, pronoun: p });
+                                setIsOpenPronoun(false);
+                              }}
+                              className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/20 ${
+                                form.pronoun === p 
+                                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-semibold' 
+                                  : 'text-slate-700 dark:text-slate-300'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
+            <div className="col-span-1 md:col-span-9 lg:col-span-9">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nome Completo / Razão Social <span className="text-red-500">*</span></label>
               <input required type="text" value={form.full_name || ''} onChange={e => setForm({ ...form, full_name: e.target.value })}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
@@ -296,51 +352,42 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
               <hr className="border-slate-100 dark:border-slate-800" />
             </div>
 
-            {/* Pronome */}
-            <div className="col-span-1 md:col-span-12 lg:col-span-4">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tratamento</label>
-              <select value={form.pronoun || ''} onChange={e => setForm({ ...form, pronoun: e.target.value })}
-                className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500">
-                {PRONOMES.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-
-            {/* CPF / CNPJ */}
-            {formType === 'PF' ? (
+            {/* Nascimento e E-mail (Apenas PF) */}
+            {formType === 'PF' && (
               <>
-                <div className="col-span-1 md:col-span-6 lg:col-span-4">
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CPF</label>
-                  <input type="text" placeholder="Apenas números" value={form.cpf || ''} maxLength={14}
-                    onChange={e => setForm({ ...form, cpf: maskCPF(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div className="col-span-1 md:col-span-6 lg:col-span-4">
+                <div className="col-span-1 md:col-span-4 lg:col-span-4">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nascimento</label>
                   <input type="date" value={form.birth_date || ''} onChange={e => setForm({ ...form, birth_date: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
                 </div>
+                <div className="col-span-1 md:col-span-8 lg:col-span-8">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">E-mail</label>
+                  <input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+                </div>
               </>
-            ) : (
-              <div className="col-span-1 md:col-span-12 lg:col-span-8">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CNPJ</label>
-                <input type="text" placeholder="Apenas números" value={form.cnpj || ''} maxLength={18}
-                  onChange={e => setForm({ ...form, cnpj: maskCNPJ(e.target.value) })}
-                  className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
-              </div>
             )}
 
-            {/* Telefone / Destino / E-mail */}
+            {/* Telefone e Destino */}
             <div className="col-span-1 md:col-span-6 lg:col-span-4">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Telefone</label>
               <input type="text" value={form.phone || ''} maxLength={15}
                 onChange={e => setForm({ ...form, phone: maskPhone(e.target.value) })}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
-            <div className="col-span-1 md:col-span-6 lg:col-span-8">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">E-mail</label>
-              <input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })}
+            <div className="col-span-1 md:col-span-6 lg:col-span-4">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Telefone Extra</label>
+              <input type="text" value={form.telefone_extra || ''} maxLength={15}
+                onChange={e => setForm({ ...form, telefone_extra: maskPhone(e.target.value) })}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
+            {formType === 'PJ' && (
+              <div className="col-span-1 md:col-span-12 lg:col-span-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">E-mail</label>
+                <input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })}
+                  className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+            )}
             <div className="col-span-1 md:col-span-12">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Destino</label>
               <input type="text" value={form.destino || ''} onChange={e => setForm({ ...form, destino: e.target.value })}

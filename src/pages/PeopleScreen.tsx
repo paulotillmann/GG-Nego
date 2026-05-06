@@ -122,7 +122,8 @@ const PeopleScreen: React.FC = () => {
     const q = search.toLowerCase();
     const matchSearch = p.full_name.toLowerCase().includes(q) ||
       (p.email && p.email.toLowerCase().includes(q)) ||
-      (p.cpf && p.cpf.includes(q)) ||
+      (p.phone && p.phone.includes(q)) ||
+      (p.telefone_extra && p.telefone_extra.includes(q)) ||
       (p.cnpj && p.cnpj.includes(q));
       
     const matchType = filterType ? p.person_type === filterType : true;
@@ -349,16 +350,19 @@ const PeopleScreen: React.FC = () => {
     const filterString = filterTexts.length > 0 ? `Filtros aplicados - ${filterTexts.join(' | ')}` : 'Nenhum filtro aplicado (Todos os registros)';
     
     // Table
-    const tableData = sorted.map(p => [
-      p.full_name || '',
-      p.person_type || '',
-      p.phone ? maskPhone(p.phone) : '',
-      p.address || '',
-      p.neighborhood || '',
-      p.city || '',
-      formatDate(p.birth_date) || '',
-      p.profiles?.full_name || '—'
-    ]);
+    const tableData = sorted.map(p => {
+      const telefones = [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ');
+      return [
+        p.full_name || '',
+        p.person_type || '',
+        telefones || '—',
+        p.address || '',
+        p.neighborhood || '',
+        p.city || '',
+        formatDate(p.birth_date) || '',
+        p.profiles?.full_name || '—'
+      ];
+    });
 
     autoTable(doc, {
       startY: 32,
@@ -588,7 +592,7 @@ const PeopleScreen: React.FC = () => {
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800/60">
-                <th className="py-4 px-6 w-10">
+                <th className="py-4 px-2 w-4">
                   <input
                     type="checkbox"
                     checked={paginated.length > 0 && paginated.every(p => selectedIds.includes(p.id))}
@@ -596,12 +600,10 @@ const PeopleScreen: React.FC = () => {
                     className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 accent-blue-600 text-blue-600 focus:ring-blue-500 dark:bg-slate-800 cursor-pointer"
                   />
                 </th>
-                <th 
-                  className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer group hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                  onClick={() => handleSort('full_name')}
-                >
-                  <div className="flex items-center">
-                    Nome Completo {renderSortIcon('full_name')}
+                <th className="py-4 px-3 text-slate-500 dark:text-slate-400 font-semibold text-xs uppercase tracking-wider max-w-[300px]">
+                  <div className="flex items-center gap-2 cursor-pointer hover:text-blue-600 transition-colors" onClick={() => handleSort('full_name')}>
+                    Nome Completo
+                    {renderSortIcon('full_name')}
                   </div>
                 </th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Endereço</th>
@@ -643,7 +645,7 @@ const PeopleScreen: React.FC = () => {
               ) : (
                 paginated.map((p) => (
                   <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800/40 hover:bg-slate-50 dark:hover:bg-[#243046]/50 transition-colors group">
-                    <td className="py-4 px-6">
+                    <td className="py-4 px-2">
                       <input
                         type="checkbox"
                         checked={selectedIds.includes(p.id)}
@@ -651,9 +653,9 @@ const PeopleScreen: React.FC = () => {
                         className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 accent-blue-600 text-blue-600 focus:ring-blue-500 dark:bg-slate-800 cursor-pointer"
                       />
                     </td>
-                    <td className="py-4 px-6">
+                    <td className="py-4 px-3 max-w-[300px]">
                       <div className="flex flex-col items-start gap-1">
-                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase">
+                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase truncate w-full">
                           {p.full_name}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium tracking-wide bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50">
@@ -671,7 +673,8 @@ const PeopleScreen: React.FC = () => {
                       {p.city || '—'}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
-                      {p.phone ? maskPhone(p.phone) : '—'}
+                      <div>{p.phone ? maskPhone(p.phone) : '—'}</div>
+                      {p.telefone_extra && <div className="text-xs text-slate-500 dark:text-slate-500 mt-1">{maskPhone(p.telefone_extra)}</div>}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
                       {formatDate(p.birth_date)}
@@ -679,20 +682,22 @@ const PeopleScreen: React.FC = () => {
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400 hidden lg:table-cell">
                       {p.profiles?.full_name || '—'}
                     </td>
-                    <td className="py-4 px-6 text-right space-x-2">
-                       <button
-                         onClick={() => openEdit(p)}
-                         className="inline-flex items-center justify-center px-3 py-1.5 h-8 border border-slate-200 dark:border-slate-700/60 rounded text-xs font-semibold text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors mr-1"
-                       >
-                         <Pencil className="h-3.5 w-3.5 mr-1.5" /> Editar
-                       </button>
-                       <button
-                         onClick={() => setDeleteId(p.id)}
-                         className="inline-flex items-center justify-center h-8 w-8 border border-slate-200 dark:border-slate-700/60 rounded text-slate-500 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                         title="Excluir"
-                       >
-                         <Trash2 className="h-4 w-4" />
-                       </button>
+                    <td className="py-4 px-6 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={() => openEdit(p)}
+                          className="inline-flex items-center justify-center px-3 py-1.5 h-8 border border-slate-200 dark:border-slate-700/60 rounded text-xs font-semibold text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" /> Editar
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(p.id)}
+                          className="inline-flex items-center justify-center h-8 w-8 border border-slate-200 dark:border-slate-700/60 rounded text-slate-500 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
