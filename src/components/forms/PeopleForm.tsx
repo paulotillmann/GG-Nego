@@ -25,6 +25,8 @@ export interface Pessoa {
   telefone_extra: string | null;
   destino: string | null;
   birth_date: string | null;
+  birth_date: string | null;
+  cpf?: string | null;
   email: string | null;
   cnpj: string | null;
   facebook_url: string | null;
@@ -44,13 +46,13 @@ export const PRONOMES = [
   'Ilustríssimo(a) Senhor(a)', 'Ilustríssimo(a) Senhor(a) Dr.(a)', 'Aos(as) sevidores(as)', 'Aos(as) proprietários(as) e funcionários(as)',
   'Ao(s) Diretor(es)', 'À Diretora'
 ];
-export const HOUSING_TYPES = ['Própria', 'Alugada', 'Cedida', 'Financiada'];
+export const HOUSING_TYPES = ['', 'Não Informado', 'Própria', 'Alugada', 'Cedida', 'Financiada'];
 export const PERSON_TYPES = ['Pessoa', 'Autoridade', 'Entidade', 'Empresa'];
 
 export const DEFAULT_FORM: Partial<Pessoa> = {
   person_type: 'Pessoa', full_name: '', pronoun: 'Sr.', address: '', address_number: '', cep: '', neighborhood: '', city: '',
   latitude: null, longitude: null,
-  housing_type: 'Própria', phone: '', telefone_extra: '', destino: '', birth_date: '', email: '',
+  housing_type: '', phone: '', telefone_extra: '', destino: '', birth_date: '', cpf: '', email: '',
   cnpj: '', facebook_url: '', instagram_url: '', reference: '', notes: ''
 };
 
@@ -166,11 +168,14 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
 
     if (!form.full_name?.trim()) { setError('Nome completo é obrigatório.'); return; }
 
+    let cleanedCpf = form.cpf?.replace(/\D/g, '') || null;
     let cleanedCnpj = form.cnpj?.replace(/\D/g, '') || null;
 
     if (formType === 'PF') {
       cleanedCnpj = null;
+      if (cleanedCpf && !validateCPF(cleanedCpf)) { setError('O CPF informado é inválido.'); return; }
     } else {
+      cleanedCpf = null;
       if (cleanedCnpj && !validateCNPJ(cleanedCnpj)) { setError('O CNPJ informado é inválido.'); return; }
     }
 
@@ -178,6 +183,7 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
 
     const payload = {
       ...form,
+      cpf: cleanedCpf,
       cnpj: cleanedCnpj,
       birth_date: form.birth_date ? form.birth_date : null,
       updated_at: new Date().toISOString()
@@ -356,11 +362,17 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
             {formType === 'PF' && (
               <>
                 <div className="col-span-1 md:col-span-4 lg:col-span-4">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CPF</label>
+                  <input type="text" placeholder="Apenas números" value={form.cpf || ''} maxLength={14}
+                    onChange={e => setForm({ ...form, cpf: maskCPF(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="col-span-1 md:col-span-4 lg:col-span-4">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nascimento</label>
                   <input type="date" value={form.birth_date || ''} onChange={e => setForm({ ...form, birth_date: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
                 </div>
-                <div className="col-span-1 md:col-span-8 lg:col-span-8">
+                <div className="col-span-1 md:col-span-4 lg:col-span-4">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">E-mail</label>
                   <input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
@@ -382,11 +394,19 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
             {formType === 'PJ' && (
-              <div className="col-span-1 md:col-span-12 lg:col-span-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">E-mail</label>
-                <input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })}
-                  className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
-              </div>
+              <>
+                <div className="col-span-1 md:col-span-4 lg:col-span-4">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CNPJ</label>
+                  <input type="text" placeholder="Apenas números" value={form.cnpj || ''} maxLength={18}
+                    onChange={e => setForm({ ...form, cnpj: maskCNPJ(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="col-span-1 md:col-span-8 lg:col-span-8">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">E-mail</label>
+                  <input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </>
             )}
             <div className="col-span-1 md:col-span-12">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Destino</label>
@@ -462,7 +482,11 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tipo de Casa</label>
               <select value={form.housing_type || ''} onChange={e => setForm({ ...form, housing_type: e.target.value })}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500">
-                {HOUSING_TYPES.map(h => <option key={h} value={h}>{h}</option>)}
+                {HOUSING_TYPES.map(h => (
+                  <option key={h} value={h}>
+                    {h === '' ? 'Selecione...' : h}
+                  </option>
+                ))}
               </select>
             </div>
 
