@@ -143,7 +143,7 @@ const RequerimentosScreen: React.FC = () => {
     sim:      items.filter(i => i.resposta_recebida === 'Sim').length,
     nao:      items.filter(i => i.resposta_recebida === 'Não').length,
     novoReq:  items.filter(i => i.resposta_recebida === 'Novo Requerimento').length,
-    delacao:  items.filter(i => i.resposta_recebida === 'Delação de Prazo').length,
+    delacao:  items.filter(i => i.resposta_recebida === 'Dilação de Prazo').length,
   }), [items]);
 
   // ── Filtros + Ordenação + Paginação ─────────────────────────────────────────
@@ -407,7 +407,7 @@ const RequerimentosScreen: React.FC = () => {
           { label: 'Respondido (Sim)',   resposta: 'Sim',              value: stats.sim,     icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400' },
           { label: 'Não Respondido',     resposta: 'Não',             value: stats.nao,     icon: XCircle,     color: 'text-red-600 dark:text-red-400' },
           { label: 'Novo Requerimento',  resposta: 'Novo Requerimento',value: stats.novoReq, icon: FilePlus2,   color: 'text-purple-600 dark:text-purple-400' },
-          { label: 'Delação de Prazo',   resposta: 'Delação de Prazo', value: stats.delacao, icon: Clock3,      color: 'text-orange-600 dark:text-orange-400' },
+          { label: 'Dilação de Prazo',   resposta: 'Dilação de Prazo', value: stats.delacao, icon: Clock3,      color: 'text-orange-600 dark:text-orange-400' },
         ].map((stat, i) => (
           <div
             key={i}

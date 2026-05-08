@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import {
   MessageSquare, Search, Clock, PlayCircle, CheckCircle, User, Phone,
-  ChevronDown, ChevronUp, MessagesSquare, Loader2, Calendar, Laptop, Frown
+  ChevronDown, ChevronUp, MessagesSquare, Loader2, Calendar, Laptop, Frown,
+  MessageCircle, Send, X
 } from 'lucide-react';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -15,6 +16,13 @@ export interface Atendimento {
   data_conversa: string;
   status: 'recebido' | 'verificado' | 'em atendimento' | 'concluído';
   created_at: string;
+}
+
+export interface PessoaMapInfo {
+  id: string;
+  full_name: string;
+  phone: string;
+  atendimento_humano: boolean;
 }
 
 const STATUS_CONFIG = {
@@ -45,7 +53,12 @@ const AtendimentoScreen: React.FC = () => {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [showScrollArrow, setShowScrollArrow] = useState(false);
   const [showScrollUpArrow, setShowScrollUpArrow] = useState(false);
-  const [pessoasMap, setPessoasMap] = useState<Record<string, string>>({});
+  
+  // WhatsApp Modal States
+  const [isResponseModalOpen, setIsResponseModalOpen] = useState(false);
+  const [responseText, setResponseText] = useState('');
+  const [isSendingResponse, setIsSendingResponse] = useState(false);
+  const [pessoasMap, setPessoasMap] = useState<Record<string, PessoaMapInfo>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // ── Fetch ───────────────────────────────────────────────────────────────
@@ -54,7 +67,7 @@ const AtendimentoScreen: React.FC = () => {
     
     const [atendRes, pessoasRes] = await Promise.all([
       supabase.from('atendimento').select('*').order('created_at', { ascending: false }),
-      supabase.from('pessoa').select('phone, full_name')
+      supabase.from('pessoa').select('id, phone, full_name, atendimento_humano')
     ]);
     
     if (atendRes.error) {
@@ -64,12 +77,12 @@ const AtendimentoScreen: React.FC = () => {
     }
 
     if (!pessoasRes.error && pessoasRes.data) {
-      const pMap: Record<string, string> = {};
+      const pMap: Record<string, PessoaMapInfo> = {};
       pessoasRes.data.forEach(p => {
         if (p.phone && p.full_name) {
           const clean = p.phone.replace(/\D/g, '');
-          pMap[clean] = p.full_name;
-          pMap[p.phone] = p.full_name;
+          pMap[clean] = p as PessoaMapInfo;
+          pMap[p.phone] = p as PessoaMapInfo;
         }
       });
       setPessoasMap(pMap);
@@ -175,6 +188,34 @@ const AtendimentoScreen: React.FC = () => {
     setUpdatingId(null);
   };
 
+  const handleSendMessage = async () => {
+    if (!responseText.trim() || !selectedWhatsapp) return;
+    
+    setIsSendingResponse(true);
+    try {
+      const response = await fetch('https://n8n.technocode.site/webhook/Nego-enviarMSN', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          whatsapp: selectedWhatsapp,
+          message: responseText.trim()
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao enviar mensagem');
+      }
+
+      setResponseText('');
+      setIsResponseModalOpen(false);
+    } catch (error) {
+      console.error("Erro ao enviar mensagem via webhook:", error);
+      alert('Ocorreu um erro ao enviar a resposta. Tente novamente.');
+    } finally {
+      setIsSendingResponse(false);
+    }
+  };
+
   // ── Scroll Indicator ────────────────────────────────────────────────────
   const handleScroll = () => {
     if (scrollRef.current) {
@@ -187,6 +228,13 @@ const AtendimentoScreen: React.FC = () => {
   useEffect(() => {
     handleScroll();
   }, [selectedHistory]);
+
+  // Rolar para o início dos registros ao trocar de contato
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [selectedWhatsapp]);
 
   // KPIs
   const total = selectedHistory.length;
@@ -258,7 +306,8 @@ const AtendimentoScreen: React.FC = () => {
             <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {contacts.map((contact) => {
                 const cleanPhone = contact.whatsapp.replace(/\D/g, '');
-                const displayName = pessoasMap[cleanPhone] || pessoasMap[contact.whatsapp] || contact.whatsapp;
+                const personInfo = pessoasMap[cleanPhone] || pessoasMap[contact.whatsapp];
+                const displayName = personInfo ? personInfo.full_name : contact.whatsapp;
                 
                 return (
                 <div 
@@ -277,7 +326,7 @@ const AtendimentoScreen: React.FC = () => {
                   
                   {/* Avatar simples gerado */}
                   <div className="h-10 w-10 shrink-0 bg-slate-200/50 dark:bg-slate-800/80 rounded-full flex items-center justify-center border border-slate-300 dark:border-slate-700/80 overflow-hidden">
-                    {(pessoasMap[cleanPhone] || pessoasMap[contact.whatsapp]) ? (
+                    {personInfo ? (
                       <img src={`https://api.dicebear.com/7.x/initials/svg?seed=${displayName}`} alt="Avatar" className="w-full h-full opacity-80" />
                     ) : (
                       <Frown className="h-5 w-5 text-slate-400 dark:text-slate-500 opacity-60" strokeWidth={1.5} />
@@ -333,11 +382,18 @@ const AtendimentoScreen: React.FC = () => {
                    </h1>
                    <p className="text-sm text-slate-500 flex items-center gap-2 mt-1">
                      <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold px-2 py-0.5 rounded-md truncate max-w-xs">
-                        {selectedWhatsapp ? (pessoasMap[selectedWhatsapp.replace(/\D/g, '')] || pessoasMap[selectedWhatsapp] || selectedWhatsapp) : 'Nenhum selecionado'}
+                        {selectedWhatsapp ? (pessoasMap[selectedWhatsapp.replace(/\D/g, '')]?.full_name || pessoasMap[selectedWhatsapp]?.full_name || selectedWhatsapp) : 'Nenhum selecionado'}
                       </span>
                      Acompanhe todas as interações e solicitações.
                    </p>
                  </div>
+                 <button
+                   onClick={() => setIsResponseModalOpen(true)}
+                   className="flex items-center gap-2 bg-[#25D366] hover:bg-[#1DA851] text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm"
+                 >
+                   <MessageCircle className="w-5 h-5" />
+                   Enviar resposta
+                 </button>
                </div>
 
                {/* Stats Row */}
@@ -454,7 +510,7 @@ const AtendimentoScreen: React.FC = () => {
                      })}
                    </AnimatePresence>
                  </div>
-                </div>
+               </div>
              </div>
              
              {/* Seta para cima quando há registros ocultos acima (estática) */}
@@ -488,6 +544,95 @@ const AtendimentoScreen: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* Modal de Enviar Resposta (WhatsApp) */}
+      {isResponseModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-[#25D366]" />
+                Enviar resposta
+              </h3>
+              <button
+                onClick={() => setIsResponseModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                Mensagem para {selectedWhatsapp ? (pessoasMap[selectedWhatsapp.replace(/\D/g, '')]?.full_name || pessoasMap[selectedWhatsapp]?.full_name || selectedWhatsapp) : ''}
+              </label>
+              <textarea
+                value={responseText}
+                onChange={(e) => setResponseText(e.target.value)}
+                placeholder="Digite a mensagem..."
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-[#25D366] focus:border-transparent outline-none resize-none h-32 text-slate-900 dark:text-white"
+              />
+              
+              {/* Toggle de Atendimento Humano (se cadastrado) */}
+              {selectedWhatsapp && (pessoasMap[selectedWhatsapp.replace(/\D/g, '')] || pessoasMap[selectedWhatsapp]) && (() => {
+                const person = pessoasMap[selectedWhatsapp.replace(/\D/g, '')] || pessoasMap[selectedWhatsapp];
+                return (
+                  <div className="mt-4 flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Atendimento Humano</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Pausar respostas da IA para este contato
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={person.atendimento_humano}
+                      onClick={async () => {
+                        const newValue = !person.atendimento_humano;
+                        setPessoasMap(prev => {
+                          const newMap = { ...prev };
+                          const cleanPhone = person.phone.replace(/\D/g, '');
+                          if (newMap[cleanPhone]) newMap[cleanPhone] = { ...newMap[cleanPhone], atendimento_humano: newValue };
+                          if (newMap[person.phone]) newMap[person.phone] = { ...newMap[person.phone], atendimento_humano: newValue };
+                          return newMap;
+                        });
+                        const { error } = await supabase.from('pessoa').update({ atendimento_humano: newValue }).eq('id', person.id);
+                        if (error) {
+                          console.error("Erro ao atualizar atendimento humano:", error);
+                          alert("Não foi possível alterar o status.");
+                        }
+                      }}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 ${
+                        person.atendimento_humano ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
+                      }`}
+                    >
+                      <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ease-in-out ${ person.atendimento_humano ? 'translate-x-5' : 'translate-x-0' }`} />
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+            
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
+              <button
+                onClick={() => setIsResponseModalOpen(false)}
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSendMessage}
+                disabled={!responseText.trim() || isSendingResponse}
+                className="flex items-center gap-2 px-4 py-2 bg-[#25D366] hover:bg-[#1DA851] text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSendingResponse ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {isSendingResponse ? 'Enviando...' : 'Enviar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

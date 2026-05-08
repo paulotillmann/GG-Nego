@@ -37,7 +37,7 @@ interface RequerimentoFormProps {
   onSuccess: (msg: string) => void;
 }
 
-export const RESPOSTAS = ['Sim', 'Não', 'Novo Requerimento', 'Delação de Prazo'] as const;
+export const RESPOSTAS = ['Sim', 'Não', 'Novo Requerimento', 'Dilação de Prazo'] as const;
 export const STATUSES  = ['Apresentado', 'Aguardando Resposta', 'Respondido', 'Não Respondido'] as const;
 
 export const STATUS_STYLES: Record<string, string> = {
@@ -51,7 +51,7 @@ export const RESPOSTA_STYLES: Record<string, string> = {
   'Sim':                'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
   'Não':                'bg-red-100    dark:bg-red-900/30    text-red-700    dark:text-red-400',
   'Novo Requerimento':  'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
-  'Delação de Prazo':   'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400',
+  'Dilação de Prazo':   'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400',
 };
 
 // ─── Componente ───────────────────────────────────────────────────────────────
