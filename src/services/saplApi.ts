@@ -1,0 +1,116 @@
+const SAPL_BASE_URL = 'https://sapl.araguari.mg.leg.br';
+
+export interface SaplMateria {
+  id: number;
+  tipo: number;
+  numero: number;
+  ano: number;
+  ementa: string;
+  data_apresentacao: string;
+  texto_original: string | null;
+  autores?: number[];
+  tramitacao_set?: any[];
+}
+
+// Estrutura real da API do SAPL (diferente de APIs Django REST padrão)
+export interface SaplApiResponse {
+  pagination: {
+    links: {
+      next: string | null;
+      previous: string | null;
+    };
+    previous_page: number | null;
+    next_page: number | null;
+    start_index: number;
+    end_index: number;
+    total_entries: number;
+    total_pages: number;
+    page: number;
+  };
+  results: SaplMateria[];
+}
+
+// Credenciais
+const USERNAME = 'nego';
+const PASSWORD = '?Dani2912';
+
+/**
+ * Busca todas as matérias legislativas do Vereador Sebastião Alves Ribeiro Júnior (autor 54)
+ * que sejam do tipo Requerimento (tipo 1).
+ */
+export async function fetchAllSaplRequerimentos(
+  ano: string | number | null,
+  onProgress?: (fetched: number, total: number) => void,
+  abortSignal?: AbortSignal
+): Promise<SaplMateria[]> {
+  const allMaterias: SaplMateria[] = [];
+  
+  const headers = new Headers();
+  headers.set('Authorization', 'Basic ' + btoa(`${USERNAME}:${PASSWORD}`));
+  headers.set('Accept', 'application/json');
+
+  const PAGE_SIZE = 100;
+  let page = 1;
+  let totalPages = 1;
+  let totalEntries = 0;
+
+  while (page <= totalPages) {
+    if (abortSignal?.aborted) {
+      throw new Error('Processo cancelado/pausado.');
+    }
+
+    try {
+      let url = `${SAPL_BASE_URL}/api/materia/materialegislativa/?autores=54&tipo=1&page_size=${PAGE_SIZE}&page=${page}`;
+      if (ano && ano !== 'Todos') {
+        url += `&ano=${ano}`;
+      }
+
+      const response = await fetch(url, { headers, signal: abortSignal });
+      if (!response.ok) {
+        throw new Error(`Erro na API SAPL: ${response.status} ${response.statusText}`);
+      }
+
+      const data: SaplApiResponse = await response.json();
+      
+      // Extrair dados de paginação da estrutura real da API
+      totalEntries = data.pagination.total_entries;
+      totalPages = data.pagination.total_pages;
+
+      if (data.results && Array.isArray(data.results)) {
+        allMaterias.push(...data.results);
+      }
+
+      if (onProgress) {
+        onProgress(allMaterias.length, totalEntries);
+      }
+
+      page++;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+         throw new Error('Processo cancelado/pausado.');
+      }
+      console.error(`Erro ao buscar página ${page} do SAPL:`, err);
+      break;
+    }
+  }
+
+  return allMaterias;
+}
+
+/**
+ * Faz o mapeamento de um objeto vindo do SAPL para o formato do Supabase
+ */
+export function mapSaplToRequerimento(sapl: SaplMateria, userId: string) {
+  const numero_requerimento = `${String(sapl.numero).padStart(3, '0')}/${sapl.ano}`;
+
+  return {
+    numero_requerimento,
+    titulo: sapl.ementa || 'Sem ementa',
+    data_sessao: sapl.data_apresentacao || new Date().toISOString().split('T')[0],
+    status: 'Apresentado',
+    resposta_recebida: null,
+    pessoa_id: null,
+    informacoes_adicionais: `Importado do SAPL (ID: ${sapl.id})`,
+    user_id: userId,
+  };
+}
