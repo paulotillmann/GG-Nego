@@ -43,7 +43,7 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ ...DEFAULT_DEP });
+  const [formData, setFormData] = useState({ ...DEFAULT_DEP, customKinship: '' });
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,20 +77,28 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
   };
 
   const resetForm = () => {
-    setFormData({ ...DEFAULT_DEP });
+    setFormData({ ...DEFAULT_DEP, customKinship: '' });
     setEditingId(null);
     setError(null);
     setShowForm(false);
   };
 
   const openEdit = (dep: Dependente) => {
+    let kinshipVal = dep.kinship || '';
+    let customVal = '';
+    if (kinshipVal && !KINSHIPS.includes(kinshipVal)) {
+      customVal = kinshipVal;
+      kinshipVal = 'Outro';
+    }
+
     setFormData({
       full_name: dep.full_name,
       birth_date: dep.birth_date,
       cpf: dep.cpf,
-      kinship: dep.kinship,
+      kinship: kinshipVal,
       phone: dep.phone,
       notes: dep.notes,
+      customKinship: customVal,
     });
     setEditingId(dep.id);
     setError(null);
@@ -112,15 +120,16 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
     }
 
     setSaving(true);
-    const payload = {
+    const payload: any = {
       ...formData,
       cpf: formData.cpf?.replace(/\D/g, '') || null,
       phone: formData.phone || null,
       birth_date: formData.birth_date || null,
       notes: formData.notes || null,
-      kinship: formData.kinship || null,
+      kinship: formData.kinship === 'Outro' ? (formData.customKinship || 'Outro') : (formData.kinship || null),
       updated_at: new Date().toISOString(),
     };
+    delete payload.customKinship;
 
     let saveError;
     if (editingId) {
@@ -268,6 +277,24 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                       <option value="">Selecione...</option>
                       {KINSHIPS.map(k => <option key={k} value={k}>{k}</option>)}
                     </select>
+                    <AnimatePresence>
+                      {formData.kinship === 'Outro' && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                          animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+                          exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <input
+                            type="text"
+                            placeholder="Especifique o parentesco"
+                            value={formData.customKinship || ''}
+                            onChange={e => setFormData({ ...formData, customKinship: e.target.value })}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
+                          />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   <div className="col-span-1 md:col-span-4">
