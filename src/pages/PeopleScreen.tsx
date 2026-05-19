@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Loader2, CheckCircle, MapPin,
   Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown,
-  Users, ShieldCheck, Building2, Briefcase, Tag, FileText, Printer
+  Users, ShieldCheck, Building2, Briefcase, Tag, FileText, Printer, Gift, Cake
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { maskPhone, maskCPF, maskCNPJ } from '../utils/validators';
@@ -51,6 +51,11 @@ const PeopleScreen: React.FC = () => {
     orientation: 'portrait' as 'portrait' | 'landscape',
   });
 
+  // Birthday Modal state
+  const [showBirthdayModal, setShowBirthdayModal] = useState(false);
+  const [birthdayList, setBirthdayList] = useState<any[]>([]);
+  const [sendingBirthday, setSendingBirthday] = useState<string | null>(null);
+
   // ─── Auto-open form check (Vindo do Dashboard) ──────────────────────────────
   useEffect(() => {
     const autoAction = sessionStorage.getItem('autoOpenForm_pessoas');
@@ -78,7 +83,20 @@ const PeopleScreen: React.FC = () => {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const fetchBirthdays = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_aniversariantes_hoje');
+      if (error) throw error;
+      setBirthdayList(data || []);
+    } catch (err: any) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => { 
+    fetchData(); 
+    fetchBirthdays();
+  }, [fetchData, fetchBirthdays]);
 
   // ── Realtime subscription ──────────────────────────────────────────────
   useEffect(() => {
@@ -1031,6 +1049,31 @@ const PeopleScreen: React.FC = () => {
     window.open(pdfUrl, '_blank');
   };
 
+  // fetchBirthdays is now memoized and called on mount
+
+  const handleOpenBirthdayModal = () => {
+    setShowBirthdayModal(true);
+    fetchBirthdays();
+  };
+
+  const handleSendWhatsApp = async (targetId?: string) => {
+    setSendingBirthday(targetId || 'all');
+    try {
+      const { data, error } = await supabase.functions.invoke('send-birthday-wpp', {
+        body: { targetId }
+      });
+      
+      if (error) throw new Error(error.message || 'Falha ao enviar mensagem');
+      
+      showSuccess(`Mensagem enviada com sucesso para ${targetId ? 'o contato' : 'todos'}.`);
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro ao disparar WhatsApp: ' + err.message);
+    } finally {
+      setSendingBirthday(null);
+    }
+  };
+
   // ── Stats ──────────────────────────────────────────────────────────────
   const stats = {
     pessoa: filtered.filter(p => p.person_type === 'Pessoa').length,
@@ -1085,6 +1128,12 @@ const PeopleScreen: React.FC = () => {
             <FileText className="h-4 w-4 mr-2" /> Relatório
           </button>
           <button
+            onClick={handleOpenBirthdayModal}
+            className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
+          >
+            <Gift className="h-4 w-4 mr-2" /> Aniversariantes
+          </button>
+          <button
             onClick={() => setShowLabelModal(true)}
             className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
           >
@@ -1111,13 +1160,13 @@ const PeopleScreen: React.FC = () => {
           { label: 'Pessoas', type: 'Pessoa', value: stats.pessoa, color: 'text-blue-600 dark:text-blue-400', icon: Users },
           { label: 'Autoridades', type: 'Autoridade', value: stats.autoridade, color: 'text-purple-600 dark:text-purple-400', icon: ShieldCheck },
           { label: 'Entidades', type: 'Entidade', value: stats.entidade, color: 'text-emerald-600 dark:text-emerald-400', icon: Building2 },
-          { label: 'Empresas', type: 'Empresa', value: stats.empresa, color: 'text-amber-600 dark:text-amber-400', icon: Briefcase },
+          { label: 'Aniversariantes Hoje', type: 'Aniversariantes', action: handleOpenBirthdayModal, value: birthdayList.length, color: 'text-orange-500 dark:text-orange-400', icon: Gift },
         ].map((stat, i) => (
           <div 
             key={i} 
-            onClick={() => setFilterType(filterType === stat.type ? '' : stat.type)}
+            onClick={stat.action ? stat.action : () => setFilterType(filterType === stat.type ? '' : stat.type)}
             className={`bg-white dark:bg-[#1C2434] rounded-2xl p-5 border shadow-sm flex flex-col justify-between transition-colors relative overflow-hidden group cursor-pointer
-              ${filterType === stat.type ? 'border-blue-500 dark:border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 dark:border-slate-800 hover:border-blue-500/50'}
+              ${stat.type !== 'Aniversariantes' && filterType === stat.type ? 'border-blue-500 dark:border-blue-500 ring-1 ring-blue-500' : 'border-slate-200 dark:border-slate-800 hover:border-blue-500/50'}
             `}
           >
             <div className="absolute top-1/2 -translate-y-1/2 -right-4 opacity-5 dark:opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-300">
@@ -1511,6 +1560,85 @@ const PeopleScreen: React.FC = () => {
                   <Tag className="h-4 w-4" />
                   Imprimir
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Aniversariantes */}
+      <AnimatePresence>
+        {showBirthdayModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 flex flex-col max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Gift className="h-5 w-5 text-blue-600" />
+                  Aniversariantes de Hoje
+                </h3>
+                <button onClick={() => setShowBirthdayModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                  <Plus className="h-5 w-5 rotate-45" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto min-h-[200px] mb-6 border border-slate-200 dark:border-slate-700 rounded-lg">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0">
+                    <tr>
+                      <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Nome</th>
+                      <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Telefone</th>
+                      <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
+                      <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase text-right">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {birthdayList.length === 0 ? (
+                      <tr>
+                         <td colSpan={4} className="py-8 text-center text-slate-500 text-sm">Nenhum aniversariante hoje.</td>
+                      </tr>
+                    ) : (
+                      birthdayList.map(b => (
+                        <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="py-3 px-4 text-sm font-medium text-slate-900 dark:text-slate-200">{b.full_name}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">{b.phone ? maskPhone(b.phone) : 'Sem número'}</td>
+                          <td className="py-3 px-4 text-sm"><span className="px-2 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-md text-xs">{b.tipo}</span></td>
+                          <td className="py-3 px-4 text-right">
+                             <button
+                               onClick={() => handleSendWhatsApp(b.id)}
+                               disabled={sendingBirthday === b.id || sendingBirthday === 'all' || !b.phone}
+                               className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:hover:bg-emerald-800/50 dark:text-emerald-400 text-xs font-medium rounded transition-colors disabled:opacity-50"
+                             >
+                               {sendingBirthday === b.id ? 'Enviando...' : 'WhatsApp'}
+                             </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex gap-3 justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="text-sm text-slate-500 dark:text-slate-400">
+                  Total: {birthdayList.length} aniversariantes
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowBirthdayModal(false)} className="px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Fechar</button>
+                  {birthdayList.length > 0 && (
+                    <button 
+                      onClick={() => handleSendWhatsApp()}
+                      disabled={sendingBirthday !== null}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      {sendingBirthday === 'all' ? 'Enviando para todos...' : 'Disparar para Todos'}
+                    </button>
+                  )}
+                </div>
               </div>
             </motion.div>
           </div>
