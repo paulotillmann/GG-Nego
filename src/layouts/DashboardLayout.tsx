@@ -19,6 +19,8 @@ import AgendaScreen     from '../pages/AgendaScreen';
 import RequerimentosScreen from '../pages/RequerimentosScreen';
 import AtendimentoScreen from '../pages/AtendimentoScreen';
 import AnotacoesScreen    from '../pages/AnotacoesScreen';
+import OficiosScreen      from '../pages/OficiosScreen';
+import ConfigOficiosScreen from '../pages/admin/ConfigOficiosScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DashboardLayoutProps {
@@ -33,6 +35,7 @@ const SIDEBAR_ITEMS = [
   { id: 'agenda',           label: 'Agenda',               icon: CalendarDays },
   { id: 'auto-atendimento', label: 'Auto Atendimento',     icon: Laptop },
   { id: 'requerimentos',    label: 'Requerimentos',        icon: FileText },
+  { id: 'oficios',          label: 'Ofícios',              icon: FileText },
   { id: 'anotacoes',        label: 'Anotações',            icon: StickyNote },
 ];
 
@@ -40,6 +43,7 @@ const CONFIG_ITEMS = [
   { id: 'config/perfis',    label: 'Perfis de Acesso',     icon: Shield },
   { id: 'config/modulos',   label: 'Módulos',              icon: Puzzle },
   { id: 'config/usuarios',  label: 'Gestão de Usuários',   icon: UsersRound },
+  { id: 'config/oficios',   label: 'Config. de Ofícios',   icon: FileText },
   { id: 'config/logs',      label: 'Logs de Atividade',    icon: ScrollText },
 ];
 
@@ -68,9 +72,11 @@ const renderContent = (activeMenu: string, children: React.ReactNode) => {
         if (activeMenu === 'anotacoes')        return <AnotacoesScreen />;
         if (activeMenu === 'auto-atendimento') return <AtendimentoScreen />;
         if (activeMenu === 'requerimentos')    return <RequerimentosScreen />;
+        if (activeMenu === 'oficios')          return <OficiosScreen />;
         if (activeMenu === 'config/perfis')    return <AccessProfiles />;
         if (activeMenu === 'config/modulos')   return <ModulesScreen />;
         if (activeMenu === 'config/usuarios')  return <UsersManagement />;
+        if (activeMenu === 'config/oficios')   return <ConfigOficiosScreen />;
         if (activeMenu === 'config/logs')      return <ActivityLogsScreen />;
         return children;
       })()}
