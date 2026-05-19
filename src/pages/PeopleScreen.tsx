@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Loader2, CheckCircle, MapPin,
   Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown,
-  Users, ShieldCheck, Building2, Briefcase, Tag, FileText, Printer, Gift, Cake
+  Users, ShieldCheck, Building2, Briefcase, Tag, FileText, Printer, Gift, Cake, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { maskPhone, maskCPF, maskCNPJ } from '../utils/validators';
@@ -55,6 +55,29 @@ const PeopleScreen: React.FC = () => {
   const [showBirthdayModal, setShowBirthdayModal] = useState(false);
   const [birthdayList, setBirthdayList] = useState<any[]>([]);
   const [sendingBirthday, setSendingBirthday] = useState<string | null>(null);
+  const [autoBirthdayActive, setAutoBirthdayActive] = useState(true);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const { data } = await supabase.from('system_settings').select('value').eq('key', 'auto_birthday_active').single();
+      if (data) {
+        setAutoBirthdayActive(data.value === 'true' || data.value === true);
+      }
+    } catch (err) {
+      console.error("Error fetching settings:", err);
+    }
+  }, []);
+
+  const toggleAutoBirthday = async () => {
+    const newValue = !autoBirthdayActive;
+    setAutoBirthdayActive(newValue);
+    try {
+      await supabase.from('system_settings').upsert({ key: 'auto_birthday_active', value: newValue ? 'true' : 'false' });
+    } catch (err) {
+      console.error("Error updating settings:", err);
+      setAutoBirthdayActive(!newValue);
+    }
+  };
 
   // ─── Auto-open form check (Vindo do Dashboard) ──────────────────────────────
   useEffect(() => {
@@ -96,7 +119,8 @@ const PeopleScreen: React.FC = () => {
   useEffect(() => { 
     fetchData(); 
     fetchBirthdays();
-  }, [fetchData, fetchBirthdays]);
+    fetchSettings();
+  }, [fetchData, fetchBirthdays, fetchSettings]);
 
   // ── Realtime subscription ──────────────────────────────────────────────
   useEffect(() => {
@@ -1577,10 +1601,24 @@ const PeopleScreen: React.FC = () => {
               className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 flex flex-col max-h-[90vh]"
             >
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Gift className="h-5 w-5 text-blue-600" />
-                  Aniversariantes de Hoje
-                </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Gift className="h-5 w-5 text-blue-600" />
+                    Aniversariantes de Hoje
+                  </h3>
+                  <button
+                    onClick={toggleAutoBirthday}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      autoBirthdayActive 
+                        ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-500/30'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                    title={autoBirthdayActive ? "Desativar envio automático" : "Ativar envio automático"}
+                  >
+                    {autoBirthdayActive ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                    Envio Automático (09h): {autoBirthdayActive ? 'ON' : 'OFF'}
+                  </button>
+                </div>
                 <button onClick={() => setShowBirthdayModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
                   <Plus className="h-5 w-5 rotate-45" />
                 </button>

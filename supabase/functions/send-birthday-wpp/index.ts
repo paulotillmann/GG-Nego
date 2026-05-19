@@ -62,6 +62,19 @@ async function processBirthdays(targetId?: string) {
   console.log("Starting birthday processing...");
   const supabase = getSupabase();
   
+  if (!targetId) {
+    const { data: setting } = await supabase
+      .from('system_settings')
+      .select('value')
+      .eq('key', 'auto_birthday_active')
+      .single();
+      
+    if (setting && setting.value === 'false') {
+      console.log("Auto birthday sending is disabled in system_settings.");
+      return { processed: 0, results: [], message: "Auto sending is disabled" };
+    }
+  }
+  
   const { data: aniversariantes, error } = await supabase.rpc('get_aniversariantes_hoje');
   
   if (error) {
