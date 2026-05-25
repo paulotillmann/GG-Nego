@@ -1,0 +1,1 @@
+# Arquivo temporário de limpeza

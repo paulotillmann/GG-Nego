@@ -25,7 +25,6 @@ export interface Pessoa {
   telefone_extra: string | null;
   destino: string | null;
   birth_date: string | null;
-  birth_date: string | null;
   cpf?: string | null;
   email: string | null;
   cnpj: string | null;
@@ -39,6 +38,7 @@ export interface Pessoa {
   user_id?: string | null;
   profiles?: { full_name: string | null } | null;
   atendimento_humano?: boolean;
+  is_deceased?: boolean;
 }
 
 export const PRONOMES = [
@@ -51,11 +51,31 @@ export const PRONOMES = [
 export const HOUSING_TYPES = ['', 'Não Informado', 'Própria', 'Alugada', 'Cedida', 'Financiada'];
 export const PERSON_TYPES = ['Pessoa', 'Autoridade', 'Entidade', 'Empresa'];
 
+export const calculateAge = (birthDateStr?: string | null) => {
+  if (!birthDateStr) return '';
+  const parts = birthDateStr.split('-');
+  if (parts.length !== 3) return '';
+  
+  const birthYear = parseInt(parts[0], 10);
+  const birthMonth = parseInt(parts[1], 10) - 1;
+  const birthDay = parseInt(parts[2], 10);
+  
+  const today = new Date();
+  let age = today.getFullYear() - birthYear;
+  const m = today.getMonth() - birthMonth;
+  
+  if (m < 0 || (m === 0 && today.getDate() < birthDay)) {
+    age--;
+  }
+  return `${age} anos`;
+};
+
 export const DEFAULT_FORM: Partial<Pessoa> = {
   person_type: 'Pessoa', full_name: '', pronoun: 'Sr.', address: '', address_number: '', cep: '', neighborhood: '', city: '',
   latitude: null, longitude: null,
   housing_type: '', phone: '', telefone_extra: '', destino: '', birth_date: '', cpf: '', email: '',
-  cnpj: '', facebook_url: '', instagram_url: '', reference: '', notes: '', atendimento_humano: false, mensagem_padrao: ''
+  cnpj: '', facebook_url: '', instagram_url: '', reference: '', notes: '', atendimento_humano: false, mensagem_padrao: '',
+  is_deceased: false
 };
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -350,10 +370,27 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
               </div>
             </div>
 
-            <div className="col-span-1 md:col-span-9 lg:col-span-9">
+            <div className="col-span-1 md:col-span-7 lg:col-span-7">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nome Completo / Razão Social <span className="text-red-500">*</span></label>
               <input required type="text" value={form.full_name || ''} onChange={e => setForm({ ...form, full_name: e.target.value })}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+            </div>
+
+            <div className="col-span-1 md:col-span-2 lg:col-span-2 flex flex-col justify-end">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 whitespace-nowrap">Falecido(a)</label>
+              <div className="flex items-center h-[46px]">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={form.is_deceased || false}
+                  onClick={() => setForm({ ...form, is_deceased: !form.is_deceased })}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 dark:focus:ring-offset-slate-950 ${
+                    form.is_deceased ? 'bg-slate-950 dark:bg-slate-100' : 'bg-slate-300 dark:bg-slate-600'
+                  }`}
+                >
+                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white dark:bg-slate-800 shadow-md ring-0 transition-transform duration-200 ease-in-out ${form.is_deceased ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
             </div>
 
             <div className="col-span-1 md:col-span-12 lg:col-span-12">
@@ -370,7 +407,9 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
                     className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div className="col-span-1 md:col-span-4 lg:col-span-4">
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Nascimento</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                    Nascimento {form.birth_date && `(${calculateAge(form.birth_date)})`}
+                  </label>
                   <input type="date" value={form.birth_date || ''} onChange={e => setForm({ ...form, birth_date: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
                 </div>

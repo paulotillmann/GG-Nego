@@ -58,18 +58,18 @@ async function sendWhatsApp(phone: string, fullName: string, customMessage?: str
   return await response.json();
 }
 
-async function processBirthdays(targetId?: string) {
-  console.log("Starting birthday processing...");
+async function processBirthdays(targetId?: string, isAutomatic = false) {
+  console.log(`Starting birthday processing (targetId: ${targetId || 'none'}, isAutomatic: ${isAutomatic})...`);
   const supabase = getSupabase();
   
-  if (!targetId) {
+  if (isAutomatic) {
     const { data: setting } = await supabase
       .from('system_settings')
       .select('value')
       .eq('key', 'auto_birthday_active')
       .single();
       
-    if (setting && setting.value === 'false') {
+    if (setting && (setting.value === 'false' || setting.value === false)) {
       console.log("Auto birthday sending is disabled in system_settings.");
       return { processed: 0, results: [], message: "Auto sending is disabled" };
     }
@@ -160,7 +160,8 @@ Deno.serve(async (req) => {
       if (authError || !user) throw new Error("Unauthorized");
     }
 
-    const result = await processBirthdays(targetId);
+    const isAutomatic = token === cronSecret;
+    const result = await processBirthdays(targetId, isAutomatic);
     
     return new Response(JSON.stringify({ success: true, result }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

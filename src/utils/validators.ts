@@ -111,3 +111,11 @@ export const maskCEP = (value: string): string => {
   if (digits.length <= 5) return digits;
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 };
+
+/**
+ * Remove acentos de uma string para comparação insensível a acentuação.
+ */
+export const removeAccents = (str: string): string => {
+  if (!str) return '';
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+};

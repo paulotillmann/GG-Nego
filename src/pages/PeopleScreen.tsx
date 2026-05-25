@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Plus, Loader2, CheckCircle, MapPin,
   Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown,
-  Users, ShieldCheck, Building2, Briefcase, Tag, FileText, Printer, Gift, Cake, ToggleLeft, ToggleRight
+  Users, ShieldCheck, Building2, Briefcase, Tag, FileText, Printer, Gift, Cake, ToggleLeft, ToggleRight,
+  Calendar, Heart
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { maskPhone, maskCPF, maskCNPJ } from '../utils/validators';
-import PeopleForm, { Pessoa, PERSON_TYPES } from '../components/forms/PeopleForm';
+import { maskPhone, maskCPF, maskCNPJ, removeAccents } from '../utils/validators';
+import PeopleForm, { Pessoa, PERSON_TYPES, calculateAge } from '../components/forms/PeopleForm';
 import PeopleMapForm from '../components/forms/PeopleMapForm';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -72,6 +73,13 @@ const PeopleScreen: React.FC = () => {
   const [birthdayList, setBirthdayList] = useState<any[]>([]);
   const [sendingBirthday, setSendingBirthday] = useState<string | null>(null);
   const [autoBirthdayActive, setAutoBirthdayActive] = useState(true);
+  const [dependentsCount, setDependentsCount] = useState(0);
+
+  // Date Range Report Modal state
+  const [showDateRangeModal, setShowDateRangeModal] = useState(false);
+  const [reportStartDate, setReportStartDate] = useState('');
+  const [reportEndDate, setReportEndDate] = useState('');
+  const [reportLoading, setReportLoading] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -119,6 +127,15 @@ const PeopleScreen: React.FC = () => {
     setLoading(true);
     const { data } = await supabase.from('pessoa').select('*, profiles(full_name)').order('created_at', { ascending: false });
     setPeople((data ?? []) as Pessoa[]);
+    
+    // Fetch dependents count
+    try {
+      const { count } = await supabase.from('dependentes').select('*', { count: 'exact', head: true });
+      setDependentsCount(count ?? 0);
+    } catch (err) {
+      console.error("Error fetching dependents count:", err);
+    }
+    
     setLoading(false);
   }, []);
 
@@ -140,7 +157,7 @@ const PeopleScreen: React.FC = () => {
 
   // ── Realtime subscription ──────────────────────────────────────────────
   useEffect(() => {
-    const channel = supabase
+    const channelPessoa = supabase
       .channel('realtime:pessoa')
       .on(
         'postgres_changes',
@@ -159,8 +176,23 @@ const PeopleScreen: React.FC = () => {
       )
       .subscribe();
 
+    const channelDependentes = supabase
+      .channel('realtime:dependentes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'dependentes' },
+        () => {
+          supabase.from('dependentes').select('*', { count: 'exact', head: true })
+            .then(({ count }) => {
+              setDependentsCount(count ?? 0);
+            });
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channelPessoa);
+      supabase.removeChannel(channelDependentes);
     };
   }, []);
 
@@ -184,12 +216,17 @@ const PeopleScreen: React.FC = () => {
   
   // ── Filtro ─────────────────────────────────────────────────────────────
   const filtered = people.filter((p) => {
-    const q = search.toLowerCase();
-    const matchSearch = p.full_name.toLowerCase().includes(q) ||
-      (p.email && p.email.toLowerCase().includes(q)) ||
-      (p.phone && p.phone.includes(q)) ||
-      (p.telefone_extra && p.telefone_extra.includes(q)) ||
-      (p.cnpj && p.cnpj.includes(q));
+    const q = removeAccents(search.toLowerCase());
+    const qClean = search.replace(/\D/g, '');
+    const matchSearch = removeAccents(p.full_name.toLowerCase()).includes(q) ||
+      (p.email && removeAccents(p.email.toLowerCase()).includes(q)) ||
+      (p.phone && (p.phone.includes(q) || (qClean && p.phone.replace(/\D/g, '').includes(qClean)))) ||
+      (p.telefone_extra && (p.telefone_extra.includes(q) || (qClean && p.telefone_extra.replace(/\D/g, '').includes(qClean)))) ||
+      (p.cnpj && p.cnpj.includes(q)) ||
+      (p.address && removeAccents(p.address.toLowerCase()).includes(q)) ||
+      (p.neighborhood && removeAccents(p.neighborhood.toLowerCase()).includes(q)) ||
+      (p.city && removeAccents(p.city.toLowerCase()).includes(q)) ||
+      (p.cep && (p.cep.includes(q) || (qClean && p.cep.replace(/\D/g, '').includes(qClean))));
       
     const matchType = filterType ? p.person_type === filterType : true;
     const matchNeighb = filterNeighborhood ? p.neighborhood === filterNeighborhood : true;
@@ -492,7 +529,7 @@ const PeopleScreen: React.FC = () => {
               ${dependentes.map(dep => `
                 <tr>
                   <td>${dep.full_name}</td>
-                  <td>${formatDate(dep.birth_date) || '—'}</td>
+                  <td>${formatDate(dep.birth_date) || '—'}${dep.birth_date ? ` (${calculateAge(dep.birth_date)})` : ''}</td>
                   <td>${dep.kinship || '—'}</td>
                   <td>${dep.phone ? maskPhone(dep.phone) : '—'}</td>
                 </tr>
@@ -639,7 +676,7 @@ const PeopleScreen: React.FC = () => {
               <div class="row">
                 <div class="field full-width">
                   <div class="label">Nome Completo / Razão Social</div>
-                  <div class="value">${person.full_name || ''}</div>
+                  <div class="value">${person.full_name || ''}${person.is_deceased ? ' (FALECIDO/A)' : ''}</div>
                 </div>
               </div>
               <div class="row">
@@ -651,10 +688,10 @@ const PeopleScreen: React.FC = () => {
                   <div class="label">Tratamento</div>
                   <div class="value">${person.pronoun || ''}</div>
                 </div>
-                <div class="field">
-                  <div class="label">Nascimento</div>
-                  <div class="value">${formatDate(person.birth_date) || ''}</div>
-                </div>
+                 <div class="field">
+                   <div class="label">Nascimento</div>
+                   <div class="value">${formatDate(person.birth_date) || ''}${person.birth_date ? ` (${calculateAge(person.birth_date)})` : ''}</div>
+                 </div>
               </div>
               <div class="row">
                 <div class="field">
@@ -800,7 +837,7 @@ const PeopleScreen: React.FC = () => {
                 ${dependentes.map((dep: any) => `
                   <tr>
                     <td>${dep.full_name}</td>
-                    <td>${formatDate(dep.birth_date) || '—'}</td>
+                    <td>${formatDate(dep.birth_date) || '—'}${dep.birth_date ? ` (${calculateAge(dep.birth_date)})` : ''}</td>
                     <td>${dep.kinship || '—'}</td>
                     <td>${dep.phone ? maskPhone(dep.phone) : '—'}</td>
                   </tr>
@@ -852,7 +889,7 @@ const PeopleScreen: React.FC = () => {
             <div class="row">
               <div class="field full-width">
                 <div class="label">Nome Completo / Razão Social</div>
-                <div class="value">${person.full_name || ''}</div>
+                <div class="value">${person.full_name || ''}${person.is_deceased ? ' (FALECIDO/A)' : ''}</div>
               </div>
             </div>
             <div class="row">
@@ -866,7 +903,7 @@ const PeopleScreen: React.FC = () => {
               </div>
               <div class="field">
                 <div class="label">Nascimento</div>
-                <div class="value">${formatDate(person.birth_date) || ''}</div>
+                <div class="value">${formatDate(person.birth_date) || ''}${person.birth_date ? ` (${calculateAge(person.birth_date)})` : ''}</div>
               </div>
             </div>
             <div class="row">
@@ -1091,13 +1128,13 @@ const PeopleScreen: React.FC = () => {
     const tableData = sorted.map(p => {
       const telefones = [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ');
       return [
-        p.full_name || '',
+        (p.full_name || '') + (p.is_deceased ? ' (FALECIDO/A)' : ''),
         p.person_type || '',
         telefones || '—',
         p.address || '',
         p.neighborhood || '',
         p.city || '',
-        formatDate(p.birth_date) || '',
+        p.birth_date ? `${formatDate(p.birth_date)} (${calculateAge(p.birth_date)})` : '—',
         p.profiles?.full_name || '—'
       ];
     });
@@ -1148,6 +1185,177 @@ const PeopleScreen: React.FC = () => {
     window.open(pdfUrl, '_blank');
   };
 
+  const generateDateRangeReport = async () => {
+    if (!reportStartDate || !reportEndDate) {
+      alert("Por favor, preencha as datas de início e fim.");
+      return;
+    }
+
+    setReportLoading(true);
+    try {
+      // Busca todas as pessoas com seus respectivos dependentes
+      const { data, error } = await supabase
+        .from('pessoa')
+        .select('*, dependentes(*)');
+
+      if (error) throw error;
+
+      // Filtra localmente baseado na data de nascimento do titular ou dependentes
+      const filtered = (data ?? []).filter((p: any) => {
+        const titularMatches = p.birth_date && p.birth_date >= reportStartDate && p.birth_date <= reportEndDate;
+        const hasMatchingDependent = p.dependentes && p.dependentes.some((dep: any) => 
+          dep.birth_date && dep.birth_date >= reportStartDate && dep.birth_date <= reportEndDate
+        );
+        return titularMatches || hasMatchingDependent;
+      });
+
+      if (filtered.length === 0) {
+        alert("Nenhum registro encontrado para o período de nascimento informado.");
+        return;
+      }
+
+      // Ordena os grupos familiares pela data de nascimento relevante mais antiga dentro do período selecionado
+      filtered.sort((a: any, b: any) => {
+        const getEarliestDate = (person: any) => {
+          const dates: string[] = [];
+          const matchesTitular = person.birth_date && person.birth_date >= reportStartDate && person.birth_date <= reportEndDate;
+          if (matchesTitular) {
+            dates.push(person.birth_date);
+          }
+          if (person.dependentes) {
+            person.dependentes.forEach((dep: any) => {
+              const matchesDep = dep.birth_date && dep.birth_date >= reportStartDate && dep.birth_date <= reportEndDate;
+              if (matchesDep) {
+                dates.push(dep.birth_date);
+              }
+            });
+          }
+          return dates.length > 0 ? dates.sort()[0] : '9999-12-31';
+        };
+
+        const dateA = getEarliestDate(a);
+        const dateB = getEarliestDate(b);
+
+        if (dateA !== dateB) {
+          return dateA.localeCompare(dateB);
+        }
+        return (a.full_name || '').localeCompare(b.full_name || '');
+      });
+
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const formatDate = (ds?: string | null) => {
+        if (!ds) return '—';
+        const parts = ds.split('-');
+        return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : ds;
+      };
+
+      const tableRows: any[] = [];
+
+      filtered.forEach((p: any) => {
+        let addressLine = p.address || '';
+        if (p.address_number) addressLine += `, ${p.address_number}`;
+        if (p.neighborhood) addressLine += ` - ${p.neighborhood}`;
+        if (p.city) addressLine += ` - ${p.city}`;
+        if (p.cep) addressLine += ` (CEP: ${p.cep})`;
+
+        const telefones = [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ');
+
+        const titularMatches = p.birth_date && p.birth_date >= reportStartDate && p.birth_date <= reportEndDate;
+
+        // Adiciona titular (exibe a data de nascimento apenas se ele estiver no período selecionado)
+        tableRows.push([
+          p.full_name || '',
+          titularMatches ? 'Titular' : 'Titular (Fora do Período)',
+          titularMatches ? `${formatDate(p.birth_date)}${p.birth_date ? ` (${calculateAge(p.birth_date)})` : ''}` : '—',
+          telefones || '—',
+          addressLine || '—'
+        ]);
+
+        // Adiciona dependentes cujas datas de nascimento estejam no período filtrado, ordenados por nascimento
+        if (p.dependentes && p.dependentes.length > 0) {
+          const sortedDeps = [...p.dependentes].sort((depA: any, depB: any) => {
+            const birthA = depA.birth_date || '9999-12-31';
+            const birthB = depB.birth_date || '9999-12-31';
+            return birthA.localeCompare(birthB);
+          });
+
+          sortedDeps.forEach((dep: any) => {
+            const depMatches = dep.birth_date && dep.birth_date >= reportStartDate && dep.birth_date <= reportEndDate;
+            if (depMatches) {
+              tableRows.push([
+                `    - ${dep.full_name || ''}`,
+                dep.kinship || 'Dependente',
+                `${formatDate(dep.birth_date)}${dep.birth_date ? ` (${calculateAge(dep.birth_date)})` : ''}`,
+                dep.phone ? maskPhone(dep.phone) : '—',
+                addressLine || '—'
+              ]);
+            }
+          });
+        }
+      });
+
+      autoTable(doc, {
+        startY: 32,
+        head: [['Nome Completo', 'Parentesco', 'Nascimento', 'Telefone', 'Endereço']],
+        body: tableRows,
+        theme: 'striped',
+        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        columnStyles: {
+          0: { cellWidth: 55 },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 20 },
+          3: { cellWidth: 30 },
+          4: { cellWidth: 'auto' }
+        },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { top: 32, right: 10, bottom: 20, left: 10 },
+        didDrawPage: (data) => {
+          doc.setTextColor(0);
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          doc.text("RELATÓRIO DE ANIVERSARIANTES POR PERÍODO", 10, 15);
+          
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text("GABINETE VEREADOR NEGO", 10, 21);
+          
+          doc.setFontSize(8);
+          doc.text(`Período de Nascimento: ${formatDate(reportStartDate)} a ${formatDate(reportEndDate)} | Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 10, 27);
+
+          let str = `Página ${(doc.internal as any).getNumberOfPages()}`;
+          if (typeof doc.putTotalPages === 'function') {
+            str = str + ' de {total_pages_count_string}';
+          }
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(150);
+          const pageHeight = doc.internal.pageSize.height || (doc.internal.pageSize as any).getHeight();
+          doc.text(str, 10, pageHeight - 10);
+        }
+      });
+
+      if (typeof doc.putTotalPages === 'function') {
+        doc.putTotalPages('{total_pages_count_string}');
+      }
+
+      const pdfBlob = doc.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      window.open(pdfUrl, '_blank');
+      setShowDateRangeModal(false);
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao gerar relatório: " + err.message);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
   // fetchBirthdays is now memoized and called on mount
 
   const handleOpenBirthdayModal = () => {
@@ -1175,7 +1383,7 @@ const PeopleScreen: React.FC = () => {
 
   // ── Stats ──────────────────────────────────────────────────────────────
   const stats = {
-    pessoa: filtered.filter(p => p.person_type === 'Pessoa').length,
+    pessoa: people.length,
     autoridade: filtered.filter(p => p.person_type === 'Autoridade').length,
     entidade: filtered.filter(p => p.person_type === 'Entidade').length,
     empresa: filtered.filter(p => p.person_type === 'Empresa').length,
@@ -1227,11 +1435,16 @@ const PeopleScreen: React.FC = () => {
             <FileText className="h-4 w-4 mr-2" /> Relatório
           </button>
           <button
-            onClick={handleOpenBirthdayModal}
+            onClick={() => {
+              setReportStartDate('');
+              setReportEndDate('');
+              setShowDateRangeModal(true);
+            }}
             className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
           >
-            <Gift className="h-4 w-4 mr-2" /> Aniversariantes
+            <Calendar className="h-4 w-4 mr-2" /> Relatório por Data Nascimento
           </button>
+
           <button
             onClick={() => setShowLabelModal(true)}
             className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
@@ -1254,11 +1467,10 @@ const PeopleScreen: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {[
           { label: 'Pessoas', type: 'Pessoa', value: stats.pessoa, color: 'text-blue-600 dark:text-blue-400', icon: Users },
-          { label: 'Autoridades', type: 'Autoridade', value: stats.autoridade, color: 'text-purple-600 dark:text-purple-400', icon: ShieldCheck },
-          { label: 'Entidades', type: 'Entidade', value: stats.entidade, color: 'text-emerald-600 dark:text-emerald-400', icon: Building2 },
+          { label: 'Dependentes', type: 'Dependentes', action: () => {}, value: dependentsCount, color: 'text-purple-600 dark:text-purple-400', icon: Heart },
           { label: 'Aniversariantes Hoje', type: 'Aniversariantes', action: handleOpenBirthdayModal, value: birthdayList.length, color: 'text-orange-500 dark:text-orange-400', icon: Gift },
         ].map((stat, i) => (
           <div 
@@ -1300,13 +1512,13 @@ const PeopleScreen: React.FC = () => {
         {/* Table Top Header (Filters & Count) */}
         <div className="p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/60">
           <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto flex-wrap">
-            <div className="relative w-full sm:w-64">
+            <div className="relative w-full sm:w-[450px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Pesquisar..."
+                placeholder="Buscar por nome, endereço ou telefone..."
                 className="w-full pl-9 pr-4 py-2 border border-slate-300 dark:border-[#2C354A] rounded-lg bg-slate-50 dark:bg-[#243046] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-slate-400"
               />
             </div>
@@ -1445,8 +1657,18 @@ const PeopleScreen: React.FC = () => {
                     </td>
                     <td className="py-4 px-3 max-w-[300px]">
                       <div className="flex flex-col items-start gap-1">
-                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase truncate w-full">
+                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase truncate w-full flex items-center flex-wrap gap-1.5">
                           {p.full_name}
+                          {p.is_deceased && (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-900 dark:text-slate-100 shrink-0" title="Falecido(a)">
+                                <path d="M12 2v20M8 8h8" />
+                              </svg>
+                              <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider bg-slate-950 dark:bg-slate-100 text-white dark:text-slate-950 border border-slate-900 dark:border-slate-200">
+                                FALECIDO(A)
+                              </span>
+                            </>
+                          )}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium tracking-wide bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50">
                           {p.person_type || 'Pessoa'}
@@ -1467,7 +1689,12 @@ const PeopleScreen: React.FC = () => {
                       {p.telefone_extra && <div className="text-xs text-slate-500 dark:text-slate-500 mt-1">{maskPhone(p.telefone_extra)}</div>}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
-                      {formatDate(p.birth_date)}
+                      <div>{formatDate(p.birth_date)}</div>
+                      {p.birth_date && (
+                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                          {calculateAge(p.birth_date)}
+                        </div>
+                      )}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400 hidden lg:table-cell">
                       {p.profiles?.full_name || '—'}
@@ -1761,6 +1988,92 @@ const PeopleScreen: React.FC = () => {
                     </button>
                   )}
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Relatório por Período */}
+      <AnimatePresence>
+        {showDateRangeModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  Relatório por Data Nascimento
+                </h3>
+                <button 
+                  onClick={() => setShowDateRangeModal(false)} 
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  <Plus className="h-5 w-5 rotate-45" />
+                </button>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Selecione o intervalo de datas para buscar as pessoas cadastradas nesse período e seus respectivos dependentes.
+                </p>
+                
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    Data de Início
+                  </label>
+                  <input
+                    type="date"
+                    value={reportStartDate}
+                    onChange={(e) => setReportStartDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    Data de Fim
+                  </label>
+                  <input
+                    type="date"
+                    value={reportEndDate}
+                    onChange={(e) => setReportEndDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button 
+                  type="button"
+                  onClick={() => setShowDateRangeModal(false)} 
+                  disabled={reportLoading}
+                  className="px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  onClick={generateDateRangeReport} 
+                  disabled={reportLoading || !reportStartDate || !reportEndDate}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  {reportLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-4 w-4" />
+                      Gerar PDF
+                    </>
+                  )}
+                </button>
               </div>
             </motion.div>
           </div>

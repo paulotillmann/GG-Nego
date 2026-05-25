@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { maskCPF, maskPhone, validateCPF } from '../../utils/validators';
+import { calculateAge } from './PeopleForm';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 interface Dependente {
@@ -309,7 +310,9 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                   </div>
 
                   <div className="col-span-1 md:col-span-4">
-                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Data de Nascimento</label>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                      Data de Nascimento {formData.birth_date && `(${calculateAge(formData.birth_date)})`}
+                    </label>
                     <input
                       type="date"
                       value={formData.birth_date || ''}
@@ -411,7 +414,12 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                     {dep.cpf ? maskCPF(dep.cpf) : '—'}
                   </td>
                   <td className="py-3 px-4 text-sm text-slate-500 dark:text-slate-400 hidden md:table-cell">
-                    {formatDate(dep.birth_date)}
+                    <div>{formatDate(dep.birth_date)}</div>
+                    {dep.birth_date && (
+                      <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                        {calculateAge(dep.birth_date)}
+                      </div>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-sm text-slate-500 dark:text-slate-400 hidden lg:table-cell">
                     {dep.phone || '—'}

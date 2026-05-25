@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { removeAccents } from '../../utils/validators';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 export interface Requerimento {
@@ -81,7 +82,7 @@ const RequerimentoForm: React.FC<RequerimentoFormProps> = ({ initialData, mode, 
   }, []);
 
   const filteredPessoas = pessoas.filter(p =>
-    p.full_name.toLowerCase().includes(pessoaSearch.toLowerCase())
+    removeAccents(p.full_name.toLowerCase()).includes(removeAccents(pessoaSearch.toLowerCase()))
   );
 
   const handleSubmit = async (e: React.FormEvent) => {

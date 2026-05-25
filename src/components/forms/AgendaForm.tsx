@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { removeAccents } from '../../utils/validators';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 export interface AgendaItem {
@@ -85,7 +86,7 @@ const AgendaForm: React.FC<AgendaFormProps> = ({ initialData, mode, onClose, onS
   }, []);
 
   const filteredPessoas = pessoas.filter(p =>
-    p.full_name.toLowerCase().includes(pessoaSearch.toLowerCase())
+    removeAccents(p.full_name.toLowerCase()).includes(removeAccents(pessoaSearch.toLowerCase()))
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
