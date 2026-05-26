@@ -18,6 +18,7 @@ interface Dependente {
   kinship: string | null;
   phone: string | null;
   notes: string | null;
+  is_deceased: boolean;
   created_at: string;
 }
 
@@ -28,6 +29,7 @@ const DEFAULT_DEP: Omit<Dependente, 'id' | 'pessoa_id' | 'created_at'> = {
   kinship: '',
   phone: null,
   notes: null,
+  is_deceased: false,
 };
 
 const KINSHIPS = ['Filho(a)', 'Cônjuge', 'Pai', 'Mãe', 'Irmão/Irmã', 'Neto(a)', 'Avô/Avó', 'Outro'];
@@ -100,6 +102,7 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
       phone: dep.phone,
       notes: dep.notes,
       customKinship: customVal,
+      is_deceased: dep.is_deceased || false,
     });
     setEditingId(dep.id);
     setError(null);
@@ -128,6 +131,7 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
       birth_date: formData.birth_date || null,
       notes: formData.notes || null,
       kinship: formData.kinship === 'Outro' ? (formData.customKinship || 'Outro') : (formData.kinship || null),
+      is_deceased: formData.is_deceased || false,
       updated_at: new Date().toISOString(),
     };
     delete payload.customKinship;
@@ -331,6 +335,26 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                     />
                   </div>
 
+                  <div className="col-span-1 md:col-span-12 flex items-center justify-between p-3.5 bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-xl mt-1">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">Falecido(a)</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                        Indica se este dependente é falecido(a)
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={formData.is_deceased || false}
+                      onClick={() => setFormData({ ...formData, is_deceased: !formData.is_deceased })}
+                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2 dark:focus:ring-offset-slate-950 ${
+                        formData.is_deceased ? 'bg-slate-950 dark:bg-slate-100' : 'bg-slate-300 dark:bg-slate-600'
+                      }`}
+                    >
+                      <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white dark:bg-slate-800 shadow-md ring-0 transition-transform duration-200 ease-in-out ${formData.is_deceased ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+
                   <div className="col-span-1 md:col-span-12">
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Observações</label>
                     <input
@@ -400,7 +424,19 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
               {dependentes.map((dep, idx) => (
                 <tr key={dep.id} className={`border-b border-slate-100 dark:border-slate-800/40 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30 dark:bg-slate-800/10'}`}>
                   <td className="py-3 px-4">
-                    <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{dep.full_name}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{dep.full_name}</span>
+                      {dep.is_deceased && (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 text-slate-900 dark:text-slate-100 shrink-0" title="Falecido(a)">
+                            <path d="M12 2v20M8 8h8" />
+                          </svg>
+                          <span className="shrink-0 text-[8px] px-1 py-0.2 rounded font-bold uppercase tracking-wider bg-slate-950 dark:bg-slate-100 text-white dark:text-slate-950 border border-slate-900 dark:border-slate-200">
+                            FALECIDO(A)
+                          </span>
+                        </>
+                      )}
+                    </div>
                     {dep.notes && <p className="text-xs text-slate-400 truncate max-w-[200px]">{dep.notes}</p>}
                   </td>
                   <td className="py-3 px-4">

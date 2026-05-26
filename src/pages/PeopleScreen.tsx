@@ -555,7 +555,7 @@ const PeopleScreen: React.FC = () => {
             <tbody>
               ${dependentes.map(dep => `
                 <tr>
-                  <td>${dep.full_name}</td>
+                  <td>${dep.full_name}${dep.is_deceased ? ' (FALECIDO/A)' : ''}</td>
                   <td>${formatDate(dep.birth_date) || '—'}${dep.birth_date ? ` (${calculateAge(dep.birth_date)})` : ''}</td>
                   <td>${dep.kinship || '—'}</td>
                   <td>${dep.phone ? maskPhone(dep.phone) : '—'}</td>
@@ -863,7 +863,7 @@ const PeopleScreen: React.FC = () => {
               <tbody>
                 ${dependentes.map((dep: any) => `
                   <tr>
-                    <td>${dep.full_name}</td>
+                    <td>${dep.full_name}${dep.is_deceased ? ' (FALECIDO/A)' : ''}</td>
                     <td>${formatDate(dep.birth_date) || '—'}${dep.birth_date ? ` (${calculateAge(dep.birth_date)})` : ''}</td>
                     <td>${dep.kinship || '—'}</td>
                     <td>${dep.phone ? maskPhone(dep.phone) : '—'}</td>
@@ -1637,16 +1637,9 @@ const PeopleScreen: React.FC = () => {
                     Bairro {renderSortIcon('neighborhood')}
                   </div>
                 </th>
-                <th 
-                  className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer group hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                  onClick={() => handleSort('city')}
-                >
-                  <div className="flex items-center">
-                    Cidade {renderSortIcon('city')}
-                  </div>
-                </th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Telefone</th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nascimento</th>
+                <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Sexo</th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden lg:table-cell">Cadastrado por</th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Ação</th>
               </tr>
@@ -1711,6 +1704,16 @@ const PeopleScreen: React.FC = () => {
                                       <span className="truncate flex items-center gap-2 flex-wrap">
                                         <strong className="text-purple-950 dark:text-purple-100 font-extrabold">Dependente:</strong>
                                         <span className="text-purple-900 dark:text-purple-200 font-bold">{dep.full_name}</span>
+                                        {dep.is_deceased && (
+                                          <>
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 text-purple-950 dark:text-purple-200 shrink-0" title="Falecido(a)">
+                                              <path d="M12 2v20M8 8h8" />
+                                            </svg>
+                                            <span className="shrink-0 text-[8px] px-1 py-0.2 rounded font-bold uppercase tracking-wider bg-slate-950 dark:bg-slate-100 text-white dark:text-slate-950 border border-slate-900 dark:border-slate-200">
+                                              FALECIDO(A)
+                                            </span>
+                                          </>
+                                        )}
                                         {dep.kinship && (
                                           <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-200 text-purple-950 dark:bg-purple-950/80 dark:text-purple-200 font-extrabold uppercase tracking-wider border border-purple-300 dark:border-purple-800">
                                             {dep.kinship}
@@ -1773,9 +1776,6 @@ const PeopleScreen: React.FC = () => {
                       {p.neighborhood || '—'}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
-                      {p.city || '—'}
-                    </td>
-                    <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
                       <div>{p.phone ? maskPhone(p.phone) : '—'}</div>
                       {p.telefone_extra && <div className="text-xs text-slate-500 dark:text-slate-500 mt-1">{maskPhone(p.telefone_extra)}</div>}
                     </td>
@@ -1786,6 +1786,17 @@ const PeopleScreen: React.FC = () => {
                           {calculateAge(p.birth_date)}
                         </div>
                       )}
+                    </td>
+                    <td className="py-4 px-6 text-sm text-center">
+                      <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                        p.gender === 'Masculino' 
+                          ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-900/40' 
+                          : p.gender === 'Feminino' 
+                            ? 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400 border border-pink-200 dark:border-pink-900/40' 
+                            : 'bg-slate-50 text-slate-500 dark:bg-slate-800/40 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
+                      }`}>
+                        {p.gender === 'Masculino' ? 'M' : p.gender === 'Feminino' ? 'F' : 'n/d'}
+                      </span>
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400 hidden lg:table-cell">
                       {p.profiles?.full_name || '—'}

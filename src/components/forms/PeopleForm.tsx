@@ -41,6 +41,7 @@ export interface Pessoa {
   is_deceased?: boolean;
   dependentes?: any[];
   servicos?: any[];
+  gender?: string;
 }
 
 export const PRONOMES = [
@@ -77,7 +78,7 @@ export const DEFAULT_FORM: Partial<Pessoa> = {
   latitude: null, longitude: null,
   housing_type: '', phone: '', telefone_extra: '', destino: '', birth_date: '', cpf: '', email: '',
   cnpj: '', facebook_url: '', instagram_url: '', reference: '', notes: '', atendimento_humano: false, mensagem_padrao: '',
-  is_deceased: false
+  is_deceased: false, gender: 'Não definido'
 };
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -106,9 +107,44 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
   );
   const [personSavedBanner, setPersonSavedBanner] = useState(false);
 
+  // Estados para verificação de endereço duplicado
+  const [duplicateAddressPeople, setDuplicateAddressPeople] = useState<any[]>([]);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+
   // Dependentes estão liberados quando: modo edit (já tem ID) OU pessoa foi salva agora
   const dependentesEnabled = !!savedPersonId;
   const pessoaId = savedPersonId || '';
+
+  // Efeito para verificar endereço duplicado com debounce
+  React.useEffect(() => {
+    const address = form.address?.trim() || '';
+    const number = form.address_number?.trim() || '';
+
+    if (address.length < 3 || !number) {
+      setDuplicateAddressPeople([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      let query = supabase
+        .from('pessoa')
+        .select('id, full_name, address, address_number, neighborhood')
+        .ilike('address', address)
+        .ilike('address_number', number);
+
+      if (mode === 'edit' && initialData?.id) {
+        query = query.neq('id', initialData.id);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        setDuplicateAddressPeople(data);
+        setShowDuplicateModal(true);
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [form.address, form.address_number, mode, initialData?.id]);
 
   // ── Busca CEP ───────────────────────────────────────────────────────────────
   const fetchCEP = useCallback(async (cepValue: string) => {
@@ -215,6 +251,8 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
     delete payload.id;
     delete payload.created_at;
     delete payload.profiles;
+    delete payload.dependentes;
+    delete payload.servicos;
 
     if (mode === 'create') {
       payload.user_id = user?.id || null;
@@ -402,20 +440,32 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
             {/* Nascimento e E-mail (Apenas PF) */}
             {formType === 'PF' && (
               <>
-                <div className="col-span-1 md:col-span-4 lg:col-span-4">
+                <div className="col-span-1 md:col-span-6 lg:col-span-3">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CPF</label>
                   <input type="text" placeholder="Apenas números" value={form.cpf || ''} maxLength={14}
                     onChange={e => setForm({ ...form, cpf: maskCPF(e.target.value) })}
                     className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
                 </div>
-                <div className="col-span-1 md:col-span-4 lg:col-span-4">
+                <div className="col-span-1 md:col-span-6 lg:col-span-3">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                     Nascimento {form.birth_date && `(${calculateAge(form.birth_date)})`}
                   </label>
                   <input type="date" value={form.birth_date || ''} onChange={e => setForm({ ...form, birth_date: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
                 </div>
-                <div className="col-span-1 md:col-span-4 lg:col-span-4">
+                <div className="col-span-1 md:col-span-6 lg:col-span-3">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Sexo</label>
+                  <select
+                    value={form.gender || 'Não definido'}
+                    onChange={e => setForm({ ...form, gender: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Não definido">Não definido</option>
+                    <option value="Masculino">Masculino</option>
+                    <option value="Feminino">Feminino</option>
+                  </select>
+                </div>
+                <div className="col-span-1 md:col-span-6 lg:col-span-3">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">E-mail</label>
                   <input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
@@ -698,6 +748,79 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
         )}
         </div>
       </div>
+
+      {/* ── Modal de Endereço Duplicado ────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showDuplicateModal && duplicateAddressPeople.length > 0 && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full relative"
+            >
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                  <MapPin className="h-6 w-6" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Endereço Já Cadastrado
+                  </h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                    O endereço <strong className="text-slate-800 dark:text-slate-200">{form.address}, {form.address_number}</strong> já existe no sistema associado a:
+                  </p>
+                </div>
+              </div>
+
+              {/* Lista de pessoas com este endereço */}
+              <div className="space-y-3 max-h-48 overflow-y-auto mb-6 custom-scrollbar pr-1">
+                {duplicateAddressPeople.map((person) => (
+                  <div
+                    key={person.id}
+                    className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-xl"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 text-sm font-bold shrink-0">
+                      {person.full_name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+                        {person.full_name}
+                      </p>
+                      {person.neighborhood && (
+                        <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                          Bairro: {person.neighborhood}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm(prev => ({ ...prev, address: '', address_number: '' }));
+                    setShowDuplicateModal(false);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+                >
+                  Limpar Campos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDuplicateModal(false)}
+                  className="px-4 py-2 text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors shadow-sm"
+                >
+                  Prosseguir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
