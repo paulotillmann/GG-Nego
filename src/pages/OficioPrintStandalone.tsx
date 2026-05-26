@@ -37,8 +37,8 @@ const OficioPrintStandalone: React.FC<OficioPrintStandaloneProps> = ({ id }) => 
   }
 
   return (
-    <div className="bg-slate-100 min-h-screen py-8">
-      <div className="max-w-[21cm] mx-auto bg-white shadow-xl">
+    <div className="bg-slate-100 min-h-screen py-8 print-container">
+      <div className="max-w-[21cm] mx-auto bg-white shadow-xl card-container">
         <OficioPrint oficio={oficio} />
       </div>
       <style>{`
@@ -47,16 +47,40 @@ const OficioPrintStandalone: React.FC<OficioPrintStandaloneProps> = ({ id }) => 
           display: block !important;
           position: relative !important;
         }
+
         @media print {
-          body {
-            background-color: white;
+          body, html {
+            background-color: transparent !important;
           }
-          .bg-slate-100 {
-            background-color: white !important;
+          #printable-oficio {
+            position: static !important;
+          }
+          .bg-slate-100, .print-container {
+            background-color: transparent !important;
+            background: transparent !important;
             padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: none !important;
+            min-height: 0 !important;
+            height: auto !important;
           }
           .shadow-xl {
             box-shadow: none !important;
+            background-color: transparent !important;
+            background: transparent !important;
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .bg-white {
+            background-color: transparent !important;
+            background: transparent !important;
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
         }
       `}</style>

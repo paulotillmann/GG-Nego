@@ -57,11 +57,7 @@ const App: React.FC = () => {
   const printOficioId = params.get('print_oficio');
 
   if (printOficioId) {
-    return (
-      <div className="antialiased text-black bg-white min-h-screen transition-colors duration-300">
-        <OficioPrintStandalone id={printOficioId} />
-      </div>
-    );
+    return <OficioPrintStandalone id={printOficioId} />;
   }
 
   return (

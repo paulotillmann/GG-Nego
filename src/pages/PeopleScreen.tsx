@@ -40,6 +40,7 @@ const PeopleScreen: React.FC = () => {
   const [people, setPeople] = useState<Pessoa[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [serviceSearch, setServiceSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterNeighborhood, setFilterNeighborhood] = useState('');
   const [filterCity, setFilterCity] = useState('');
@@ -125,7 +126,7 @@ const PeopleScreen: React.FC = () => {
   // ── Fetch ──────────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('pessoa').select('*, profiles(full_name)').order('created_at', { ascending: false });
+    const { data } = await supabase.from('pessoa').select('*, profiles(full_name), dependentes(*), servicos(*)').order('created_at', { ascending: false });
     setPeople((data ?? []) as Pessoa[]);
     
     // Fetch dependents count
@@ -167,7 +168,7 @@ const PeopleScreen: React.FC = () => {
             setPeople((prev) => [payload.new as Pessoa, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
             setPeople((prev) =>
-              prev.map((p) => (p.id === (payload.new as Pessoa).id ? { ...(payload.new as Pessoa), profiles: p.profiles } : p))
+              prev.map((p) => (p.id === (payload.new as Pessoa).id ? { ...(payload.new as Pessoa), profiles: p.profiles, dependentes: p.dependentes, servicos: p.servicos } : p))
             );
           } else if (payload.eventType === 'DELETE') {
             setPeople((prev) => prev.filter((p) => p.id !== (payload.old as Pessoa).id));
@@ -185,7 +186,19 @@ const PeopleScreen: React.FC = () => {
           supabase.from('dependentes').select('*', { count: 'exact', head: true })
             .then(({ count }) => {
               setDependentsCount(count ?? 0);
+              fetchData();
             });
+        }
+      )
+      .subscribe();
+
+    const channelServicos = supabase
+      .channel('realtime:servicos')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'servicos' },
+        () => {
+          fetchData();
         }
       )
       .subscribe();
@@ -193,6 +206,7 @@ const PeopleScreen: React.FC = () => {
     return () => {
       supabase.removeChannel(channelPessoa);
       supabase.removeChannel(channelDependentes);
+      supabase.removeChannel(channelServicos);
     };
   }, []);
 
@@ -200,7 +214,7 @@ const PeopleScreen: React.FC = () => {
   const itemsPerPage = 8;
   
   // Reseta paginação na busca/filtro
-  useEffect(() => { setCurrentPage(1); }, [search, filterType, filterNeighborhood, filterCity, filterBirthdayMonth]);
+  useEffect(() => { setCurrentPage(1); }, [search, serviceSearch, filterType, filterNeighborhood, filterCity, filterBirthdayMonth]);
 
   // Ao selecionar um mês de aniversário, define a ordenação por data de nascimento como padrão (crescente)
   useEffect(() => {
@@ -218,6 +232,13 @@ const PeopleScreen: React.FC = () => {
   const filtered = people.filter((p) => {
     const q = removeAccents(search.toLowerCase());
     const qClean = search.replace(/\D/g, '');
+    
+    const matchDependent = p.dependentes && p.dependentes.some((dep: any) => {
+      const depName = removeAccents(dep.full_name.toLowerCase());
+      const depPhone = dep.phone ? dep.phone.replace(/\D/g, '') : '';
+      return depName.includes(q) || (qClean && depPhone.includes(qClean));
+    });
+
     const matchSearch = removeAccents(p.full_name.toLowerCase()).includes(q) ||
       (p.email && removeAccents(p.email.toLowerCase()).includes(q)) ||
       (p.phone && (p.phone.includes(q) || (qClean && p.phone.replace(/\D/g, '').includes(qClean)))) ||
@@ -226,7 +247,13 @@ const PeopleScreen: React.FC = () => {
       (p.address && removeAccents(p.address.toLowerCase()).includes(q)) ||
       (p.neighborhood && removeAccents(p.neighborhood.toLowerCase()).includes(q)) ||
       (p.city && removeAccents(p.city.toLowerCase()).includes(q)) ||
-      (p.cep && (p.cep.includes(q) || (qClean && p.cep.replace(/\D/g, '').includes(qClean))));
+      (p.cep && (p.cep.includes(q) || (qClean && p.cep.replace(/\D/g, '').includes(qClean)))) ||
+      !!matchDependent;
+
+    const qService = removeAccents(serviceSearch.toLowerCase());
+    const matchService = !serviceSearch ? true : (p.servicos && p.servicos.some((s: any) => {
+      return s.description && removeAccents(s.description.toLowerCase()).includes(qService);
+    }));
       
     const matchType = filterType ? p.person_type === filterType : true;
     const matchNeighb = filterNeighborhood ? p.neighborhood === filterNeighborhood : true;
@@ -248,7 +275,7 @@ const PeopleScreen: React.FC = () => {
       }
     }
 
-    return matchSearch && matchType && matchNeighb && matchCity && matchBirthdayMonth;
+    return matchSearch && matchService && matchType && matchNeighb && matchCity && matchBirthdayMonth;
   });
 
   // ── Ordenação ──────────────────────────────────────────────────────────
@@ -1518,28 +1545,21 @@ const PeopleScreen: React.FC = () => {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nome, endereço ou telefone..."
+                placeholder="Buscar por nome, dependente, endereço ou telefone..."
                 className="w-full pl-9 pr-4 py-2 border border-slate-300 dark:border-[#2C354A] rounded-lg bg-slate-50 dark:bg-[#243046] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-slate-400"
               />
             </div>
-            
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="w-full sm:w-36 px-3 py-2 border border-slate-300 dark:border-[#2C354A] rounded-lg bg-slate-50 dark:bg-[#243046] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">Todos os Tipos</option>
-              {PERSON_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
 
-            <select
-              value={filterCity}
-              onChange={(e) => setFilterCity(e.target.value)}
-              className="w-full sm:w-40 px-3 py-2 border border-slate-300 dark:border-[#2C354A] rounded-lg bg-slate-50 dark:bg-[#243046] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">Todas Cidades</option>
-              {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <div className="relative w-full sm:w-[350px]">
+              <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                value={serviceSearch}
+                onChange={(e) => setServiceSearch(e.target.value)}
+                placeholder="Buscar por descrição do serviço..."
+                className="w-full pl-9 pr-4 py-2 border border-slate-300 dark:border-[#2C354A] rounded-lg bg-slate-50 dark:bg-[#243046] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-slate-400"
+              />
+            </div>
 
             <select
               value={filterNeighborhood}
@@ -1673,6 +1693,77 @@ const PeopleScreen: React.FC = () => {
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium tracking-wide bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50">
                           {p.person_type || 'Pessoa'}
                         </span>
+                        {search && p.dependentes && p.dependentes.length > 0 && (
+                          (() => {
+                            const q = removeAccents(search.toLowerCase());
+                            const qClean = search.replace(/\D/g, '');
+                            const matchedDeps = p.dependentes.filter((dep: any) => {
+                              const depName = removeAccents(dep.full_name.toLowerCase());
+                              const depPhone = dep.phone ? dep.phone.replace(/\D/g, '') : '';
+                              return depName.includes(q) || (qClean && depPhone.includes(qClean));
+                            });
+                            if (matchedDeps.length > 0) {
+                              return (
+                                <div className="mt-2 flex flex-col gap-1.5 w-full animate-in fade-in slide-in-from-top-1 duration-200">
+                                  {matchedDeps.map((dep: any) => (
+                                    <span key={dep.id} className="text-xs inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-100/90 text-purple-900 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-300 dark:border-purple-700/60 font-semibold shadow-sm transition-all hover:scale-[1.01] w-max max-w-full">
+                                      <Users className="h-4 w-4 shrink-0 text-purple-600 dark:text-purple-400 animate-pulse" />
+                                      <span className="truncate flex items-center gap-2 flex-wrap">
+                                        <strong className="text-purple-950 dark:text-purple-100 font-extrabold">Dependente:</strong>
+                                        <span className="text-purple-900 dark:text-purple-200 font-bold">{dep.full_name}</span>
+                                        {dep.kinship && (
+                                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-200 text-purple-950 dark:bg-purple-950/80 dark:text-purple-200 font-extrabold uppercase tracking-wider border border-purple-300 dark:border-purple-800">
+                                            {dep.kinship}
+                                          </span>
+                                        )}
+                                        {dep.phone && (
+                                          <span className="text-purple-800 dark:text-purple-400 font-sans font-bold">
+                                            · {maskPhone(dep.phone)}
+                                          </span>
+                                        )}
+                                      </span>
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()
+                        )}
+                        {serviceSearch && p.servicos && p.servicos.length > 0 && (
+                          (() => {
+                            const qService = removeAccents(serviceSearch.toLowerCase());
+                            const matchedServices = p.servicos.filter((s: any) => {
+                              return s.description && removeAccents(s.description.toLowerCase()).includes(qService);
+                            });
+                            if (matchedServices.length > 0) {
+                              return (
+                                <div className="mt-2 flex flex-col gap-1.5 w-full animate-in fade-in slide-in-from-top-1 duration-200">
+                                  {matchedServices.map((s: any) => (
+                                    <span key={s.id} className="text-xs inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-100/90 text-amber-900 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 font-semibold shadow-sm transition-all hover:scale-[1.01] w-max max-w-full">
+                                      <Briefcase className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 animate-pulse" />
+                                      <span className="truncate flex items-center gap-2 flex-wrap">
+                                        <strong className="text-amber-950 dark:text-amber-100 font-extrabold">Serviço:</strong>
+                                        <span className="text-amber-900 dark:text-amber-200 font-bold">{s.description}</span>
+                                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-200 text-amber-950 dark:bg-amber-950/80 dark:text-amber-200 font-extrabold uppercase tracking-wider border border-amber-300 dark:border-amber-800">
+                                          {formatDate(s.service_date)}
+                                        </span>
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-extrabold uppercase tracking-wider border ${
+                                          s.is_attended 
+                                            ? 'bg-green-200 text-green-950 border-green-300 dark:bg-green-950/80 dark:text-green-200 dark:border-green-800' 
+                                            : 'bg-slate-200 text-slate-950 border-slate-300 dark:bg-slate-950/80 dark:text-slate-200 dark:border-slate-800'
+                                        }`}>
+                                          {s.is_attended ? 'Atendido' : 'Pendente'}
+                                        </span>
+                                      </span>
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()
+                        )}
                       </div>
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400 truncate max-w-[200px]">

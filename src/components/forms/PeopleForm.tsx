@@ -39,6 +39,8 @@ export interface Pessoa {
   profiles?: { full_name: string | null } | null;
   atendimento_humano?: boolean;
   is_deceased?: boolean;
+  dependentes?: any[];
+  servicos?: any[];
 }
 
 export const PRONOMES = [
