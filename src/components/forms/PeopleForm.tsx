@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin, ChevronDown } from 'lucide-react';
+import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin, ChevronDown, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { validateCPF, validateCNPJ, maskCPF, maskCNPJ, maskPhone, maskCEP } from '../../utils/validators';
@@ -87,10 +87,11 @@ interface PeopleFormProps {
   mode: 'create' | 'edit';
   onClose: () => void;
   onSuccess: (msg: string) => void;
+  onEditPerson?: (person: Pessoa) => void;
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
-const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onSuccess }) => {
+const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onSuccess, onEditPerson }) => {
   const { profile, user } = useAuth();
   const [isOpenPronoun, setIsOpenPronoun] = useState(false);
   const [form, setForm] = useState<Partial<Pessoa>>(initialData || DEFAULT_FORM);
@@ -128,7 +129,7 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
     const timer = setTimeout(async () => {
       let query = supabase
         .from('pessoa')
-        .select('id, full_name, address, address_number, neighborhood')
+        .select('*')
         .ilike('address', address)
         .ilike('address_number', number);
 
@@ -779,20 +780,32 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
                 {duplicateAddressPeople.map((person) => (
                   <div
                     key={person.id}
-                    className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-xl"
+                    onClick={() => {
+                      setShowDuplicateModal(false);
+                      if (onEditPerson) {
+                        onEditPerson(person as Pessoa);
+                      }
+                    }}
+                    className="flex items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/60 rounded-xl cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20 hover:border-blue-200 dark:hover:border-blue-800/50 transition-all duration-200 group/item"
+                    title="Clique para abrir o cadastro desta pessoa"
                   >
-                    <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 text-sm font-bold shrink-0">
-                      {person.full_name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
-                        {person.full_name}
-                      </p>
-                      {person.neighborhood && (
-                        <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
-                          Bairro: {person.neighborhood}
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 text-sm font-bold shrink-0 group-hover/item:bg-blue-600 group-hover/item:text-white transition-colors duration-200">
+                        {person.full_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate group-hover/item:text-blue-600 dark:group-hover/item:text-blue-400 transition-colors">
+                          {person.full_name}
                         </p>
-                      )}
+                        {person.neighborhood && (
+                          <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
+                            Bairro: {person.neighborhood}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center text-slate-400 dark:text-slate-500 group-hover/item:text-blue-600 dark:group-hover/item:text-blue-400 pr-1 transition-colors">
+                      <ExternalLink className="h-4 w-4" />
                     </div>
                   </div>
                 ))}

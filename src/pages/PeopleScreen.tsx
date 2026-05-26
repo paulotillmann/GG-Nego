@@ -1282,6 +1282,7 @@ const PeopleScreen: React.FC = () => {
       };
 
       const tableRows: any[] = [];
+      let totalInPeriod = 0;
 
       filtered.forEach((p: any) => {
         let addressLine = p.address || '';
@@ -1293,6 +1294,9 @@ const PeopleScreen: React.FC = () => {
         const telefones = [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ');
 
         const titularMatches = p.birth_date && p.birth_date >= reportStartDate && p.birth_date <= reportEndDate;
+        if (titularMatches) {
+          totalInPeriod++;
+        }
 
         // Adiciona titular (exibe a data de nascimento apenas se ele estiver no período selecionado)
         tableRows.push([
@@ -1314,6 +1318,7 @@ const PeopleScreen: React.FC = () => {
           sortedDeps.forEach((dep: any) => {
             const depMatches = dep.birth_date && dep.birth_date >= reportStartDate && dep.birth_date <= reportEndDate;
             if (depMatches) {
+              totalInPeriod++;
               tableRows.push([
                 `    - ${dep.full_name || ''}`,
                 dep.kinship || 'Dependente',
@@ -1348,6 +1353,12 @@ const PeopleScreen: React.FC = () => {
           doc.setFont("helvetica", "bold");
           doc.text("RELATÓRIO DE ANIVERSARIANTES POR PERÍODO", 10, 15);
           
+          // Destaque para o Total de Aniversariantes no Período (canto superior direito)
+          doc.setFontSize(12);
+          doc.setTextColor(37, 99, 235); // Azul característico
+          doc.text(`Total no Período: ${totalInPeriod}`, 200, 15, { align: 'right' });
+          
+          doc.setTextColor(0);
           doc.setFontSize(10);
           doc.setFont("helvetica", "normal");
           doc.text("GABINETE VEREADOR NEGO", 10, 21);
@@ -1426,6 +1437,7 @@ const PeopleScreen: React.FC = () => {
     return (
       <div className="h-full">
         <PeopleForm
+          key={editingPerson?.id || 'new'}
           initialData={editingPerson}
           mode={editingPerson ? 'edit' : 'create'}
           onClose={() => setShowForm(false)}
@@ -1433,6 +1445,9 @@ const PeopleScreen: React.FC = () => {
             setShowForm(false);
             fetchData();
             showSuccess(msg);
+          }}
+          onEditPerson={(p) => {
+            openEdit(p);
           }}
         />
       </div>
