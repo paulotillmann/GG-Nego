@@ -4,7 +4,7 @@ import {
   Search, Plus, Loader2, CheckCircle, MapPin,
   Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown,
   Users, ShieldCheck, Building2, Briefcase, Tag, FileText, Printer, Gift, Cake, ToggleLeft, ToggleRight,
-  Calendar, Heart, Send, AlertCircle
+  Calendar, Heart, Send, AlertCircle, SlidersHorizontal
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { maskPhone, maskCPF, maskCNPJ, removeAccents } from '../utils/validators';
@@ -61,8 +61,12 @@ const PeopleScreen: React.FC = () => {
   // Map state
   const [showDemographicMap, setShowDemographicMap] = useState(false);
 
+  // Actions dropdown state
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+
   // Label Modal state
   const [showLabelModal, setShowLabelModal] = useState(false);
+  const [labelTarget, setLabelTarget] = useState<'titular' | 'dependentes'>('titular');
   const [labelConfig, setLabelConfig] = useState({
     size: '100x50',
     paper: 'a4',
@@ -275,20 +279,27 @@ const PeopleScreen: React.FC = () => {
     const matchNeighb = filterNeighborhood ? p.neighborhood === filterNeighborhood : true;
     const matchCity = filterCity ? p.city === filterCity : true;
 
-    // Filtro de aniversariantes por mês independente do ano
+    // Filtro de aniversariantes por mês independente do ano (busca no titular e dependentes ativos)
     let matchBirthdayMonth = true;
     if (filterBirthdayMonth) {
+      let titularMatches = false;
       if (p.birth_date) {
         const parts = p.birth_date.split('-');
         if (parts.length === 3) {
-          // parts[1] é o mês '01', '02', ..., '12'
-          matchBirthdayMonth = parts[1] === filterBirthdayMonth;
-        } else {
-          matchBirthdayMonth = false;
+          titularMatches = parts[1] === filterBirthdayMonth;
         }
-      } else {
-        matchBirthdayMonth = false;
       }
+
+      let dependentMatches = false;
+      if (p.dependentes && p.dependentes.length > 0) {
+        dependentMatches = p.dependentes.some((dep: any) => {
+          if (dep.is_deceased || !dep.birth_date) return false;
+          const parts = dep.birth_date.split('-');
+          return parts.length === 3 && parts[1] === filterBirthdayMonth;
+        });
+      }
+
+      matchBirthdayMonth = titularMatches || dependentMatches;
     }
 
     return matchSearch && matchService && matchType && matchNeighb && matchCity && matchBirthdayMonth;
@@ -434,9 +445,58 @@ const PeopleScreen: React.FC = () => {
   };
 
   const generateLabels = () => {
-    if (sorted.length === 0) {
-      alert("Nenhum registro encontrado para gerar etiquetas.");
-      return;
+    interface LabelItem {
+      name: string;
+      destino?: string | null;
+      pronoun?: string | null;
+      address: string | null;
+      address_number: string | null;
+      neighborhood: string | null;
+      city: string | null;
+      cep: string | null;
+    }
+
+    let labelItems: LabelItem[] = [];
+
+    if (labelTarget === 'titular') {
+      if (sorted.length === 0) {
+        alert("Nenhum registro de titular encontrado para gerar etiquetas.");
+        return;
+      }
+      labelItems = sorted.map(person => ({
+        name: person.full_name,
+        destino: person.destino,
+        pronoun: person.pronoun,
+        address: person.address,
+        address_number: person.address_number,
+        neighborhood: person.neighborhood,
+        city: person.city,
+        cep: person.cep
+      }));
+    } else {
+      sorted.forEach(person => {
+        if (person.dependentes && person.dependentes.length > 0) {
+          person.dependentes.forEach(dep => {
+            if (!dep.is_deceased) {
+              labelItems.push({
+                name: dep.full_name,
+                destino: null,
+                pronoun: null,
+                address: person.address,
+                address_number: person.address_number,
+                neighborhood: person.neighborhood,
+                city: person.city,
+                cep: person.cep
+              });
+            }
+          });
+        }
+      });
+
+      if (labelItems.length === 0) {
+        alert("Nenhum dependente ativo encontrado para gerar etiquetas.");
+        return;
+      }
     }
 
     const doc = new jsPDF({
@@ -465,7 +525,7 @@ const PeopleScreen: React.FC = () => {
     const marginLeft = (pageWidth - (labelWidth * columns)) / 2;
     const marginTop = (pageHeight - (labelHeight * rows)) / 2;
     
-    sorted.forEach((person, index) => {
+    labelItems.forEach((item, index) => {
       if (index > 0 && index % labelsPerPage === 0) {
         doc.addPage();
       }
@@ -482,42 +542,42 @@ const PeopleScreen: React.FC = () => {
       let currentY = y + padding + 4;
       
       // Se tiver setor (destino), imprime na primeira linha
-      if (person.destino) {
+      if (item.destino) {
         doc.setFontSize(8);
         doc.setFont("helvetica", "bold");
-        const destinoText = doc.splitTextToSize(person.destino.toUpperCase(), labelWidth - 2 * padding);
+        const destinoText = doc.splitTextToSize(item.destino.toUpperCase(), labelWidth - 2 * padding);
         doc.text(destinoText, innerX, currentY);
         currentY += (destinoText.length * 3.5);
       }
 
-      if (person.pronoun) {
+      if (item.pronoun) {
         doc.setFontSize(8);
         doc.setFont("helvetica", "normal");
-        const pronounText = doc.splitTextToSize(person.pronoun, labelWidth - 2 * padding);
+        const pronounText = doc.splitTextToSize(item.pronoun, labelWidth - 2 * padding);
         doc.text(pronounText, innerX, currentY);
         currentY += (pronounText.length * 3.5);
       }
 
       doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
-      const nameText = doc.splitTextToSize((person.full_name || '').toUpperCase(), labelWidth - 2 * padding);
+      const nameText = doc.splitTextToSize((item.name || '').toUpperCase(), labelWidth - 2 * padding);
       doc.text(nameText, innerX, currentY);
       currentY += (nameText.length * 4.0);
       
       doc.setFontSize(7);
       doc.setFont("helvetica", "normal");
       
-      let addressLine = person.address || '';
-      if (person.address_number) addressLine += `, ${person.address_number}`;
-      if (person.neighborhood) addressLine += ` - ${person.neighborhood}`;
+      let addressLine = item.address || '';
+      if (item.address_number) addressLine += `, ${item.address_number}`;
+      if (item.neighborhood) addressLine += ` - ${item.neighborhood}`;
       if (addressLine) {
          const addressWrapped = doc.splitTextToSize(addressLine, labelWidth - 2 * padding);
          doc.text(addressWrapped, innerX, currentY);
          currentY += (addressWrapped.length * 3.0);
       }
       
-      let cityLine = person.city || '';
-      if (person.cep) cityLine += ` | CEP: ${person.cep}`;
+      let cityLine = item.city || '';
+      if (item.cep) cityLine += ` | CEP: ${item.cep}`;
       if (cityLine) {
          const cityWrapped = doc.splitTextToSize(cityLine, labelWidth - 2 * padding);
          doc.text(cityWrapped, innerX, currentY);
@@ -1611,35 +1671,73 @@ const PeopleScreen: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={generateReport}
-            className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
-          >
-            <FileText className="h-4 w-4 mr-2" /> Relatório
-          </button>
-          <button
-            onClick={() => {
-              setReportStartDate('');
-              setReportEndDate('');
-              setShowDateRangeModal(true);
-            }}
-            className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
-          >
-            <Calendar className="h-4 w-4 mr-2" /> Relatório por Data Nascimento
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowActionsMenu(!showActionsMenu)}
+              className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm gap-2"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              <span>Opções e Relatórios</span>
+              <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${showActionsMenu ? 'rotate-180' : ''}`} />
+            </button>
 
-          <button
-            onClick={() => setShowLabelModal(true)}
-            className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
-          >
-            <Tag className="h-4 w-4 mr-2" /> Etiquetas
-          </button>
-          <button
-            onClick={() => setShowDemographicMap(true)}
-            className="flex items-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
-          >
-            <MapPin className="h-4 w-4 mr-2" /> Mapa Demográfico
-          </button>
+            {showActionsMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowActionsMenu(false)} />
+                <div className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1C2434] shadow-lg z-50 p-1.5 space-y-1 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      generateReport();
+                    }}
+                    className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
+                  >
+                    <FileText className="h-4 w-4 mr-2.5 text-slate-400" /> Relatório geral
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      setReportStartDate('');
+                      setReportEndDate('');
+                      setShowDateRangeModal(true);
+                    }}
+                    className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
+                  >
+                    <Calendar className="h-4 w-4 mr-2.5 text-slate-400" /> Relatório por Nasc.
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      setLabelTarget('titular');
+                      setShowLabelModal(true);
+                    }}
+                    className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
+                  >
+                    <Tag className="h-4 w-4 mr-2.5 text-slate-400" /> Etiquetas do titular
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      setLabelTarget('dependentes');
+                      setShowLabelModal(true);
+                    }}
+                    className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
+                  >
+                    <Tag className="h-4 w-4 mr-2.5 text-slate-400" /> Etiquetas de dependentes
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      setShowDemographicMap(true);
+                    }}
+                    className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
+                  >
+                    <MapPin className="h-4 w-4 mr-2.5 text-slate-400" /> Mapa Demográfico
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={openCreate}
             className="flex items-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
@@ -1716,6 +1814,15 @@ const PeopleScreen: React.FC = () => {
                 className="w-full pl-9 pr-4 py-2 border border-slate-300 dark:border-[#2C354A] rounded-lg bg-slate-50 dark:bg-[#243046] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder-slate-400"
               />
             </div>
+
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="w-full sm:w-44 px-3 py-2 border border-slate-300 dark:border-[#2C354A] rounded-lg bg-slate-50 dark:bg-[#243046] text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">Todas as Categorias</option>
+              {PERSON_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
 
             <select
               value={filterNeighborhood}
@@ -1892,6 +1999,39 @@ const PeopleScreen: React.FC = () => {
                                         {dep.phone && (
                                           <span className="text-purple-800 dark:text-purple-400 font-sans font-bold">
                                             · {maskPhone(dep.phone)}
+                                          </span>
+                                        )}
+                                      </span>
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()
+                        )}
+                        {filterBirthdayMonth && p.dependentes && p.dependentes.length > 0 && (
+                          (() => {
+                            const matchedBirthdayDeps = p.dependentes.filter((dep: any) => {
+                              if (dep.is_deceased || !dep.birth_date) return false;
+                              const parts = dep.birth_date.split('-');
+                              return parts.length === 3 && parts[1] === filterBirthdayMonth;
+                            });
+                            if (matchedBirthdayDeps.length > 0) {
+                              return (
+                                <div className="mt-2 flex flex-col gap-1.5 w-full animate-in fade-in slide-in-from-top-1 duration-200">
+                                  {matchedBirthdayDeps.map((dep: any) => (
+                                    <span key={dep.id} className="text-xs inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-pink-100/90 text-pink-900 dark:bg-pink-900/40 dark:text-pink-300 border border-pink-300 dark:border-pink-700/60 font-semibold shadow-sm transition-all hover:scale-[1.01] w-max max-w-full">
+                                      <Cake className="h-4 w-4 shrink-0 text-pink-600 dark:text-pink-400 animate-pulse" />
+                                      <span className="truncate flex items-center gap-2 flex-wrap">
+                                        <strong className="text-pink-950 dark:text-pink-100 font-extrabold">Aniversariante (Dep.):</strong>
+                                        <span className="text-pink-900 dark:text-pink-200 font-bold">{dep.full_name}</span>
+                                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-pink-200 text-pink-950 dark:bg-pink-950/80 dark:text-pink-200 font-extrabold uppercase tracking-wider border border-pink-300 dark:border-pink-800 font-sans font-bold">
+                                          {formatDate(dep.birth_date)} {dep.birth_date ? `(${calculateAge(dep.birth_date)})` : ''}
+                                        </span>
+                                        {dep.kinship && (
+                                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-200 text-purple-950 dark:bg-purple-950/80 dark:text-purple-200 font-extrabold uppercase tracking-wider border border-purple-300 dark:border-purple-800">
+                                            {dep.kinship}
                                           </span>
                                         )}
                                       </span>
@@ -2107,7 +2247,7 @@ const PeopleScreen: React.FC = () => {
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                   <Tag className="h-5 w-5 text-blue-600" />
-                  Configurar Etiquetas
+                  Configurar Etiquetas ({labelTarget === 'titular' ? 'Titulares' : 'Dependentes'})
                 </h3>
                 <button onClick={() => setShowLabelModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
                   <Plus className="h-5 w-5 rotate-45" />
