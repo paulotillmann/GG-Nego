@@ -852,7 +852,7 @@ const PeopleScreen: React.FC = () => {
               </div>
               <div class="row">
                 <div class="field full-width">
-                  <div class="label">Referências/Mensagem de Aniversário</div>
+                  <div class="label">Mensagens diversas / Mensagem de Aniversário</div>
                   <div class="value">${person.mensagem_padrao || ''}</div>
                 </div>
               </div>
@@ -2366,7 +2366,16 @@ const PeopleScreen: React.FC = () => {
                       birthdayList.map(b => (
                         <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                           <td className="py-3 px-4 text-sm font-medium text-slate-900 dark:text-slate-200">{b.full_name}</td>
-                          <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">{b.phone ? maskPhone(b.phone) : 'Sem número'}</td>
+                          <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">
+                            <div className="flex items-center gap-1.5">
+                              <span>{b.phone ? maskPhone(b.phone) : 'Sem número'}</span>
+                              {b.is_parent_phone && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider border border-amber-200 dark:border-amber-500/20" title="Número herdado do titular responsável">
+                                  Titular
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="py-3 px-4 text-sm"><span className="px-2 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-md text-xs">{b.tipo}</span></td>
                           <td className="py-3 px-4 text-right">
                              <button
@@ -2384,11 +2393,19 @@ const PeopleScreen: React.FC = () => {
                 </table>
               </div>
 
-              <div className="flex gap-3 justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800">
-                <div className="text-sm text-slate-500 dark:text-slate-400">
-                  Total: {birthdayList.length} aniversariantes
+              <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col gap-1.5">
+                  <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Total: {birthdayList.length} aniversariantes
+                  </div>
+                  {birthdayList.some(b => b.is_parent_phone) && (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="inline-block w-2 h-2 rounded bg-amber-50 text-amber-700 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20"></span>
+                      <span><strong className="text-amber-800 dark:text-amber-400">Titular:</strong> O dependente não tem celular próprio e receberá a mensagem no WhatsApp do titular.</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 self-end sm:self-auto">
                   <button onClick={() => setShowBirthdayModal(false)} className="px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Fechar</button>
                   {birthdayList.length > 0 && (
                     <button 

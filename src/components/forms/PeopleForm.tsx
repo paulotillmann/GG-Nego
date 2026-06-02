@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin, ChevronDown, ExternalLink } from 'lucide-react';
+import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin, ChevronDown, ExternalLink, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { validateCPF, validateCNPJ, maskCPF, maskCNPJ, maskPhone, maskCEP } from '../../utils/validators';
@@ -100,6 +100,50 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
   const [error, setError] = useState<string | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
+
+  const [sendingWpp, setSendingWpp] = useState(false);
+  const [wppStatus, setWppStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleSendInstantWpp = async () => {
+    if (!form.phone) {
+      setWppStatus({ type: 'error', message: 'Preencha o campo de telefone.' });
+      return;
+    }
+    if (!form.mensagem_padrao?.trim()) {
+      setWppStatus({ type: 'error', message: 'Preencha a mensagem de aniversário.' });
+      return;
+    }
+
+    setSendingWpp(true);
+    setWppStatus(null);
+
+    try {
+      const { data, error: funcError } = await supabase.functions.invoke('send-custom-wpp', {
+        body: {
+          phone: form.phone,
+          fullName: form.full_name || 'Contato',
+          personId: form.id || null,
+          message: form.mensagem_padrao
+        }
+      });
+
+      if (funcError) throw funcError;
+
+      setWppStatus({ type: 'success', message: 'Mensagem enviada com sucesso!' });
+      
+      setTimeout(() => {
+        setWppStatus(null);
+      }, 5000);
+    } catch (err: any) {
+      console.error(err);
+      setWppStatus({ 
+        type: 'error', 
+        message: `Falha ao enviar: ${err.message || 'Erro desconhecido'}` 
+      });
+    } finally {
+      setSendingWpp(false);
+    }
+  };
 
   // Controla se a pessoa já foi salva na sessão atual (novo cadastro)
   // No modo edit, já temos o ID. No modo create, ficamos aguardando o retorno do insert.
@@ -640,9 +684,53 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="col-span-1 md:col-span-12">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Referências/Mensagem de Aniversário</label>
-              <textarea value={form.mensagem_padrao || ''} onChange={e => setForm({ ...form, mensagem_padrao: e.target.value })} rows={2}
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Mensagens diversas / Mensagem de Aniversário
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSendInstantWpp}
+                  disabled={sendingWpp || !form.phone || !form.mensagem_padrao?.trim()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-400 rounded-md text-xs font-semibold shadow-sm transition-all enabled:hover:scale-[1.02] enabled:active:scale-95 disabled:opacity-60"
+                  title={!form.phone || !form.mensagem_padrao?.trim() ? "Preencha o telefone e a mensagem para poder enviar" : "Enviar mensagem de aniversário agora pelo WhatsApp"}
+                >
+                  {sendingWpp ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Enviando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-3 w-3" />
+                      <span>Enviar WhatsApp</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <textarea value={form.mensagem_padrao || ''} onChange={e => { setForm({ ...form, mensagem_padrao: e.target.value }); if (wppStatus) setWppStatus(null); }} rows={2}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
+              <AnimatePresence>
+                {wppStatus && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className={`mt-2 p-3 rounded-lg border text-sm flex items-center gap-2 ${
+                      wppStatus.type === 'success'
+                        ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800/80 dark:text-green-400'
+                        : 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800/80 dark:text-red-400'
+                    }`}
+                  >
+                    {wppStatus.type === 'success' ? (
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                    )}
+                    <span>{wppStatus.message}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
             <div className="col-span-1 md:col-span-12">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Observações Gerais</label>
