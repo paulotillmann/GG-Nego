@@ -893,8 +893,10 @@ const PeopleScreen: React.FC = () => {
     if (selectedIds.length === 0) return;
     setPrintingSelected(true);
     
-    // Pegar as pessoas selecionadas da lista 'people'
-    const selectedPeople = people.filter(p => selectedIds.includes(p.id));
+    // Pegar as pessoas selecionadas da lista 'people' e ordenar por nome ascendente
+    const selectedPeople = people
+      .filter(p => selectedIds.includes(p.id))
+      .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
     
     // Para cada pessoa selecionada, buscar dependentes e serviços
     const fullPeopleData = await Promise.all(selectedPeople.map(async (person) => {
