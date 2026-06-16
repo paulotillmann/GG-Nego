@@ -20,7 +20,7 @@ async function sendWhatsApp(phone: string, fullName: string, customMessage?: str
   }
 
   const firstName = fullName.split(' ')[0];
-  let message = `Olá *${firstName}*, tudo bem?\n\nHoje é um dia muito especial! Em nome do Gabinete do Vereador Nego, gostaríamos de lhe desejar um **Feliz Aniversário**! 🎉🥳\n\nQue seu dia seja repleto de alegrias, saúde e paz. Um forte abraço!`;
+  let message = `Olá, ${firstName}!\n\nHoje é um dia especial, e em nome do Gabinete do Vereador Nego, desejamos a você um feliz aniversário! 🎉🎂\n\nQue este novo ciclo seja repleto de saúde, paz, alegrias, conquistas e muitos momentos felizes ao lado das pessoas que você ama. Que Deus abençoe sua vida, ilumine seus caminhos e realize os desejos do seu coração.\n\nReceba nosso carinho e os votos de um dia maravilhoso!\n\nParabéns! 🥳✨\n\nUm forte abraço,\nGabinete do Vereador Nego`;
 
   if (customMessage && customMessage.trim() !== '') {
     message = customMessage.replace(/\{nome\}/gi, firstName).replace(/\{nome_completo\}/gi, fullName);
@@ -98,9 +98,14 @@ async function processBirthdays(targetId?: string, isAutomatic = false) {
       
       const res = await sendWhatsApp(person.phone, person.full_name, person.mensagem_padrao);
       
+      const targetTable = person.tipo === 'Pessoa' ? 'pessoa' : 'dependentes';
+      await supabase.from(targetTable)
+        .update({ wpp_aniversario_enviado_em: new Date().toISOString() })
+        .eq('id', person.id);
+
       await supabase.from('activity_logs').insert({
         action: 'WHATSAPP_ENVIO',
-        table_name: person.tipo === 'Pessoa' ? 'pessoa' : 'dependentes',
+        table_name: targetTable,
         record_id: person.id,
         description: `Mensagem de aniversário enviada para ${person.full_name}`,
         metadata: { phone: person.phone, evolution_response: res }

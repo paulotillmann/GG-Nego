@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Plus, Loader2, Trash2, Pencil,
-  AlertCircle, X, CheckCircle, Lock
+  AlertCircle, X, CheckCircle, Lock, Send, Paperclip
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { maskCPF, maskPhone, validateCPF } from '../../utils/validators';
@@ -20,6 +20,8 @@ interface Dependente {
   notes: string | null;
   is_deceased: boolean;
   created_at: string;
+  gender?: string | null;
+  mensagem_padrao?: string | null;
 }
 
 const DEFAULT_DEP: Omit<Dependente, 'id' | 'pessoa_id' | 'created_at'> = {
@@ -30,6 +32,8 @@ const DEFAULT_DEP: Omit<Dependente, 'id' | 'pessoa_id' | 'created_at'> = {
   phone: null,
   notes: null,
   is_deceased: false,
+  gender: 'Não definido',
+  mensagem_padrao: '',
 };
 
 const KINSHIPS = ['Filho(a)', 'Cônjuge', 'Pai', 'Mãe', 'Irmão/Irmã', 'Neto(a)', 'Avô/Avó', 'Outro'];
@@ -51,6 +55,11 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [sendingWpp, setSendingWpp] = useState(false);
+  const [wppStatus, setWppStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const wppFileInputRef = React.useRef<HTMLInputElement>(null);
 
   // ── Fetch ────────────────────────────────────────────────────────────────────
   const fetchDependentes = useCallback(async () => {
@@ -83,6 +92,8 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
     setFormData({ ...DEFAULT_DEP, customKinship: '' });
     setEditingId(null);
     setError(null);
+    setWppStatus(null);
+    setAttachment(null);
     setShowForm(false);
   };
 
@@ -103,6 +114,8 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
       notes: dep.notes,
       customKinship: customVal,
       is_deceased: dep.is_deceased || false,
+      gender: dep.gender || 'Não definido',
+      mensagem_padrao: dep.mensagem_padrao || '',
     });
     setEditingId(dep.id);
     setError(null);
@@ -132,6 +145,8 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
       notes: formData.notes || null,
       kinship: formData.kinship === 'Outro' ? (formData.customKinship || 'Outro') : (formData.kinship || null),
       is_deceased: formData.is_deceased || false,
+      gender: formData.gender || 'Não definido',
+      mensagem_padrao: formData.mensagem_padrao || null,
       updated_at: new Date().toISOString(),
     };
     delete payload.customKinship;
@@ -170,6 +185,76 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
       setDeleteId(null);
       fetchDependentes();
       showSuccess('Dependente removido.');
+    }
+  };
+
+  // ── Enviar WhatsApp instantâneo ─────────────────────────────────────────────
+  const handleSendInstantWpp = async () => {
+    if (!formData.phone) {
+      setWppStatus({ type: 'error', message: 'Telefone é obrigatório.' });
+      return;
+    }
+    if (!formData.mensagem_padrao?.trim() && !attachment) {
+      setWppStatus({ type: 'error', message: 'Preencha a mensagem ou selecione um anexo.' });
+      return;
+    }
+
+    setSendingWpp(true);
+    setWppStatus(null);
+    setUploadingAttachment(true);
+
+    try {
+      let mediaUrl = null;
+      let mediaType = null;
+
+      if (attachment) {
+        const ext = attachment.name.split('.').pop();
+        const filename = `attachments/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('wpp-attachments')
+          .upload(filename, attachment, { upsert: true });
+
+        if (uploadError) throw new Error(`Falha no upload do anexo: ${uploadError.message}`);
+
+        const { data: urlData } = supabase.storage.from('wpp-attachments').getPublicUrl(filename);
+        mediaUrl = urlData.publicUrl;
+        
+        mediaType = attachment.type.startsWith('image/') ? 'image' : 'document';
+      }
+
+      setUploadingAttachment(false);
+
+      const { data, error: funcError } = await supabase.functions.invoke('send-custom-wpp', {
+        body: {
+          phone: formData.phone,
+          fullName: formData.full_name || 'Contato',
+          personId: editingId || null,
+          tableName: 'dependentes',
+          message: formData.mensagem_padrao || '',
+          mediaUrl,
+          mediaType,
+          fileName: attachment?.name || null
+        }
+      });
+
+      if (funcError) throw funcError;
+
+      setWppStatus({ type: 'success', message: 'Mensagem enviada com sucesso!' });
+      setAttachment(null);
+      
+      setTimeout(() => {
+        setWppStatus(null);
+      }, 5000);
+    } catch (err: any) {
+      console.error(err);
+      setWppStatus({ 
+        type: 'error', 
+        message: `Falha ao enviar: ${err.message || 'Erro desconhecido'}` 
+      });
+    } finally {
+      setSendingWpp(false);
+      setUploadingAttachment(false);
     }
   };
 
@@ -302,7 +387,7 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                     </AnimatePresence>
                   </div>
 
-                  <div className="col-span-1 md:col-span-4">
+                  <div className="col-span-1 md:col-span-3">
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">CPF</label>
                     <input
                       type="text" maxLength={14}
@@ -313,7 +398,7 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                     />
                   </div>
 
-                  <div className="col-span-1 md:col-span-4">
+                  <div className="col-span-1 md:col-span-3">
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                       Data de Nascimento {formData.birth_date && `(${calculateAge(formData.birth_date)})`}
                     </label>
@@ -325,7 +410,20 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                     />
                   </div>
 
-                  <div className="col-span-1 md:col-span-4">
+                  <div className="col-span-1 md:col-span-3">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Sexo</label>
+                    <select
+                      value={formData.gender || 'Não definido'}
+                      onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="Não definido">Não definido</option>
+                      <option value="Masculino">Masculino</option>
+                      <option value="Feminino">Feminino</option>
+                    </select>
+                  </div>
+
+                  <div className="col-span-1 md:col-span-3">
                     <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Telefone</label>
                     <input
                       type="text" maxLength={15}
@@ -353,6 +451,121 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                     >
                       <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white dark:bg-slate-800 shadow-md ring-0 transition-transform duration-200 ease-in-out ${formData.is_deceased ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
+                  </div>
+
+                  <div className="col-span-1 md:col-span-12">
+                    <div className="flex justify-between items-center mb-1.5 flex-wrap gap-2">
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">
+                        Mensagens diversas / Mensagem de WhatsApp
+                      </label>
+                      
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="file"
+                          ref={wppFileInputRef}
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) setAttachment(file);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => wppFileInputRef.current?.click()}
+                          disabled={sendingWpp}
+                          className="inline-flex items-center justify-center p-2 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
+                          title="Anexar Imagem ou Documento"
+                        >
+                          <Paperclip className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSendInstantWpp}
+                          disabled={sendingWpp || !formData.phone || (!formData.mensagem_padrao?.trim() && !attachment)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-400 rounded-md text-xs font-semibold shadow-sm transition-all enabled:hover:scale-[1.02] enabled:active:scale-95 disabled:opacity-60"
+                          title={!formData.phone || (!formData.mensagem_padrao?.trim() && !attachment) ? "Preencha o telefone e a mensagem ou anexo para poder enviar" : "Enviar mensagem pelo WhatsApp agora"}
+                        >
+                          {sendingWpp ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <span>{uploadingAttachment ? 'Enviando Anexo...' : 'Enviando...'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-3 w-3" />
+                              <span>Enviar WhatsApp</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Preview do Anexo */}
+                    <AnimatePresence>
+                      {attachment && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden mb-2"
+                        >
+                          <div className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {attachment.type.startsWith('image/') ? (
+                                <img
+                                  src={URL.createObjectURL(attachment)}
+                                  alt="Preview do Anexo"
+                                  className="h-8 w-8 rounded object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                                />
+                              ) : (
+                                <div className="h-8 w-8 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
+                                  DOC
+                                </div>
+                              )}
+                              <span className="text-slate-700 dark:text-slate-300 font-medium truncate">
+                                {attachment.name}
+                              </span>
+                              <span className="text-slate-400 shrink-0">
+                                ({(attachment.size / 1024).toFixed(1)} KB)
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setAttachment(null)}
+                              className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-red-500 transition-colors"
+                              title="Remover Anexo"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <textarea
+                      value={formData.mensagem_padrao || ''}
+                      onChange={e => { setFormData({ ...formData, mensagem_padrao: e.target.value }); if (wppStatus) setWppStatus(null); }}
+                      rows={2}
+                      className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                    <AnimatePresence>
+                      {wppStatus && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className={`mt-2 p-3 rounded-lg border text-xs flex items-center gap-2 ${
+                            wppStatus.type === 'success'
+                              ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800/80 dark:text-green-400'
+                              : 'bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800/80 dark:text-red-400'
+                          }`}
+                        >
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          <span>{wppStatus.message}</span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   <div className="col-span-1 md:col-span-12">
@@ -417,6 +630,7 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                 <th className="py-3 px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden md:table-cell">CPF</th>
                 <th className="py-3 px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden md:table-cell">Nascimento</th>
                 <th className="py-3 px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden lg:table-cell">Telefone</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Sexo</th>
                 <th className="py-3 px-4 w-10"></th>
               </tr>
             </thead>
@@ -459,6 +673,17 @@ const DependentesSection: React.FC<DependentesSectionProps> = ({ pessoaId, disab
                   </td>
                   <td className="py-3 px-4 text-sm text-slate-500 dark:text-slate-400 hidden lg:table-cell">
                     {dep.phone || '—'}
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                      dep.gender === 'Masculino' 
+                        ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-900/40' 
+                        : dep.gender === 'Feminino' 
+                          ? 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400 border border-pink-200 dark:border-pink-900/40' 
+                          : 'bg-slate-50 text-slate-500 dark:bg-slate-800/40 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
+                    }`}>
+                      {dep.gender === 'Masculino' ? 'M' : dep.gender === 'Feminino' ? 'F' : 'n/d'}
+                    </span>
                   </td>
                   <td className="py-3 px-4 text-right">
                     {deleteId === dep.id ? (

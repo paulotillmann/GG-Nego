@@ -12,7 +12,14 @@ const getSupabaseService = () => {
   );
 }
 
-async function sendWhatsApp(phone: string, fullName: string, customMessage: string) {
+async function sendWhatsApp(
+  phone: string,
+  fullName: string,
+  customMessage: string,
+  mediaUrl?: string | null,
+  mediaType?: string | null,
+  fileName?: string | null
+) {
   const cleanPhone = phone.replace(/\D/g, "");
   let waNumber = cleanPhone;
   if (!waNumber.startsWith("55") && waNumber.length >= 10) {
@@ -28,19 +35,38 @@ async function sendWhatsApp(phone: string, fullName: string, customMessage: stri
       .replace(/\{nome_completo\}/gi, fullName);
   }
 
-  const payload = {
-    number: waNumber,
-    options: {
-      delay: 1200,
-      presence: "composing",
-      linkPreview: false
-    },
-    text: message
-  };
+  let payload: any;
+  let endpoint = "";
 
-  const url = `${EVOLUTION_API_URL}/message/sendText/${encodeURIComponent(INSTANCE_NAME)}`;
+  if (mediaUrl) {
+    payload = {
+      number: waNumber,
+      options: {
+        delay: 1200,
+        presence: "composing"
+      },
+      mediatype: mediaType || "document",
+      media: mediaUrl,
+      caption: message || undefined,
+      fileName: fileName || "arquivo"
+    };
+    endpoint = "sendMedia";
+  } else {
+    payload = {
+      number: waNumber,
+      options: {
+        delay: 1200,
+        presence: "composing",
+        linkPreview: false
+      },
+      text: message
+    };
+    endpoint = "sendText";
+  }
+
+  const url = `${EVOLUTION_API_URL}/message/${endpoint}/${encodeURIComponent(INSTANCE_NAME)}`;
   
-  console.log(`Sending custom message to Evolution API: ${url} for number ${waNumber}`);
+  console.log(`Sending WhatsApp message to Evolution API: ${url} for number ${waNumber}`);
   
   const response = await fetch(url, {
     method: "POST",
@@ -71,10 +97,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { phone, fullName, personId, message } = await req.json();
+    const { phone, fullName, personId, message, tableName, mediaUrl, mediaType, fileName } = await req.json();
     
-    if (!phone || !fullName || !message) {
-      throw new Error("Missing parameters: phone, fullName, and message are required.");
+    if (!phone || !fullName) {
+      throw new Error("Missing parameters: phone and fullName are required.");
     }
     
     // Auth Validation
@@ -104,17 +130,19 @@ Deno.serve(async (req) => {
     let logAction = "";
 
     try {
-      res = await sendWhatsApp(phone, fullName, message);
+      res = await sendWhatsApp(phone, fullName, message, mediaUrl, mediaType, fileName);
       logAction = 'WHATSAPP_CUSTOM_ENVIO';
-      logDescription = `Mensagem em lote enviada via WhatsApp para ${fullName}`;
+      logDescription = mediaUrl 
+        ? `Mensagem com anexo enviada via WhatsApp para ${fullName}` 
+        : `Mensagem em lote enviada via WhatsApp para ${fullName}`;
       
       // Salvar log de sucesso
       await supabaseService.from('activity_logs').insert({
         action: logAction,
-        table_name: 'pessoa',
+        table_name: tableName || 'pessoa',
         record_id: personId || null,
         description: logDescription,
-        metadata: { phone, evolution_response: res }
+        metadata: { phone, media_url: mediaUrl, media_type: mediaType, file_name: fileName, evolution_response: res }
       });
 
       return new Response(JSON.stringify({ success: true, result: res }), {
@@ -124,15 +152,17 @@ Deno.serve(async (req) => {
 
     } catch (err: any) {
       logAction = 'WHATSAPP_CUSTOM_FALHA';
-      logDescription = `Falha ao enviar mensagem em lote via WhatsApp para ${fullName}`;
+      logDescription = mediaUrl 
+        ? `Falha ao enviar mensagem com anexo via WhatsApp para ${fullName}`
+        : `Falha ao enviar mensagem em lote via WhatsApp para ${fullName}`;
       
       // Salvar log de falha
       await supabaseService.from('activity_logs').insert({
         action: logAction,
-        table_name: 'pessoa',
+        table_name: tableName || 'pessoa',
         record_id: personId || null,
         description: logDescription,
-        metadata: { phone, error: err.message }
+        metadata: { phone, media_url: mediaUrl, media_type: mediaType, error: err.message }
       });
       
       throw err;

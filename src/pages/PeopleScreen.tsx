@@ -623,18 +623,24 @@ const PeopleScreen: React.FC = () => {
             <thead>
               <tr>
                 <th>Nome Completo</th>
+                <th>CPF</th>
+                <th>Sexo</th>
                 <th>Data Nasc.</th>
                 <th>Parentesco</th>
                 <th>Telefone</th>
+                <th>Observações</th>
               </tr>
             </thead>
             <tbody>
               ${dependentes.map(dep => `
                 <tr>
                   <td>${dep.full_name}${dep.is_deceased ? ' (FALECIDO/A)' : ''}</td>
+                  <td>${dep.cpf ? maskCPF(dep.cpf) : '—'}</td>
+                  <td>${dep.gender || 'Não definido'}</td>
                   <td>${formatDate(dep.birth_date) || '—'}${dep.birth_date ? ` (${calculateAge(dep.birth_date)})` : ''}</td>
                   <td>${dep.kinship || '—'}</td>
                   <td>${dep.phone ? maskPhone(dep.phone) : '—'}</td>
+                  <td>${dep.notes || '—'}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -795,6 +801,10 @@ const PeopleScreen: React.FC = () => {
                    <div class="label">Nascimento</div>
                    <div class="value">${formatDate(person.birth_date) || ''}${person.birth_date ? ` (${calculateAge(person.birth_date)})` : ''}</div>
                  </div>
+                 <div class="field">
+                   <div class="label">Sexo</div>
+                   <div class="value">${person.gender || 'Não definido'}</div>
+                 </div>
               </div>
               <div class="row">
                 <div class="field">
@@ -804,6 +814,10 @@ const PeopleScreen: React.FC = () => {
                 <div class="field">
                   <div class="label">CNPJ</div>
                   <div class="value">${person.cnpj ? maskCNPJ(person.cnpj) : ''}</div>
+                </div>
+                <div class="field">
+                  <div class="label">Atendimento Humano</div>
+                  <div class="value">${person.atendimento_humano ? 'Sim' : 'Não'}</div>
                 </div>
               </div>
             </div>
@@ -834,6 +848,16 @@ const PeopleScreen: React.FC = () => {
                 <div class="field">
                   <div class="label">Ponto de Referência</div>
                   <div class="value">${person.reference || ''}</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="field">
+                  <div class="label">Tipo de Casa</div>
+                  <div class="value">${person.housing_type || 'Não Informado'}</div>
+                </div>
+                <div class="field">
+                  <div class="label">Coordenadas (Lat / Lng)</div>
+                  <div class="value">${person.latitude != null && person.longitude != null ? `${person.latitude} / ${person.longitude}` : '—'}</div>
                 </div>
               </div>
             </div>
@@ -933,18 +957,24 @@ const PeopleScreen: React.FC = () => {
               <thead>
                 <tr>
                   <th>Nome Completo</th>
+                  <th>CPF</th>
+                  <th>Sexo</th>
                   <th>Data Nasc.</th>
                   <th>Parentesco</th>
                   <th>Telefone</th>
+                  <th>Observações</th>
                 </tr>
               </thead>
               <tbody>
                 ${dependentes.map((dep: any) => `
                   <tr>
                     <td>${dep.full_name}${dep.is_deceased ? ' (FALECIDO/A)' : ''}</td>
+                    <td>${dep.cpf ? maskCPF(dep.cpf) : '—'}</td>
+                    <td>${dep.gender || 'Não definido'}</td>
                     <td>${formatDate(dep.birth_date) || '—'}${dep.birth_date ? ` (${calculateAge(dep.birth_date)})` : ''}</td>
                     <td>${dep.kinship || '—'}</td>
                     <td>${dep.phone ? maskPhone(dep.phone) : '—'}</td>
+                    <td>${dep.notes || '—'}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1010,6 +1040,10 @@ const PeopleScreen: React.FC = () => {
                 <div class="label">Nascimento</div>
                 <div class="value">${formatDate(person.birth_date) || ''}${person.birth_date ? ` (${calculateAge(person.birth_date)})` : ''}</div>
               </div>
+              <div class="field">
+                <div class="label">Sexo</div>
+                <div class="value">${person.gender || 'Não definido'}</div>
+              </div>
             </div>
             <div class="row">
               <div class="field">
@@ -1019,6 +1053,10 @@ const PeopleScreen: React.FC = () => {
               <div class="field">
                 <div class="label">CNPJ</div>
                 <div class="value">${person.cnpj ? maskCNPJ(person.cnpj) : ''}</div>
+              </div>
+              <div class="field">
+                <div class="label">Atendimento Humano</div>
+                <div class="value">${person.atendimento_humano ? 'Sim' : 'Não'}</div>
               </div>
             </div>
           </div>
@@ -1049,6 +1087,16 @@ const PeopleScreen: React.FC = () => {
               <div class="field">
                 <div class="label">Ponto de Referência</div>
                 <div class="value">${person.reference || ''}</div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field">
+                <div class="label">Tipo de Casa</div>
+                <div class="value">${person.housing_type || 'Não Informado'}</div>
+              </div>
+              <div class="field">
+                <div class="label">Coordenadas (Lat / Lng)</div>
+                <div class="value">${person.latitude != null && person.longitude != null ? `${person.latitude} / ${person.longitude}` : '—'}</div>
               </div>
             </div>
           </div>
@@ -1918,6 +1966,14 @@ const PeopleScreen: React.FC = () => {
                 </th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Telefone</th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nascimento</th>
+                <th 
+                  className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer group hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  onClick={() => handleSort('wpp_aniversario_enviado_em')}
+                >
+                  <div className="flex items-center">
+                    Envio Aniversário {renderSortIcon('wpp_aniversario_enviado_em')}
+                  </div>
+                </th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Sexo</th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden lg:table-cell">Cadastrado por</th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Ação</th>
@@ -1926,13 +1982,13 @@ const PeopleScreen: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-20 text-center">
+                  <td colSpan={10} className="py-20 text-center">
                     <Loader2 className="h-8 w-8 text-blue-600 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
+                  <td colSpan={10} className="py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
                     Nenhum registro encontrado.
                   </td>
                 </tr>
@@ -2097,6 +2153,20 @@ const PeopleScreen: React.FC = () => {
                         <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                           {calculateAge(p.birth_date)}
                         </div>
+                      )}
+                    </td>
+                    <td className="py-4 px-6 text-sm">
+                      {p.wpp_aniversario_enviado_em ? (
+                        <div className="inline-flex flex-col items-center justify-center bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800/30 shadow-sm min-w-[100px]">
+                          <span className="text-xs font-semibold whitespace-nowrap">
+                            {new Date(p.wpp_aniversario_enviado_em).toLocaleDateString('pt-BR')}
+                          </span>
+                          <span className="text-[10px] font-medium opacity-80 mt-0.5 whitespace-nowrap">
+                            {new Date(p.wpp_aniversario_enviado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 dark:text-slate-600">—</span>
                       )}
                     </td>
                     <td className="py-4 px-6 text-sm text-center">

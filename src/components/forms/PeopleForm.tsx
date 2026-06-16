@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin, ChevronDown, ExternalLink, Send } from 'lucide-react';
+import { Loader2, AlertCircle, ChevronLeft, Save, CheckCircle2, Search, MapPin, ChevronDown, ExternalLink, Send, Paperclip, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { validateCPF, validateCNPJ, maskCPF, maskCNPJ, maskPhone, maskCEP } from '../../utils/validators';
@@ -42,6 +42,7 @@ export interface Pessoa {
   dependentes?: any[];
   servicos?: any[];
   gender?: string;
+  wpp_aniversario_enviado_em?: string | null;
 }
 
 export const PRONOMES = [
@@ -103,33 +104,63 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
 
   const [sendingWpp, setSendingWpp] = useState(false);
   const [wppStatus, setWppStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const wppFileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleSendInstantWpp = async () => {
     if (!form.phone) {
-      setWppStatus({ type: 'error', message: 'Preencha o campo de telefone.' });
+      setWppStatus({ type: 'error', message: 'Telefone é obrigatório.' });
       return;
     }
-    if (!form.mensagem_padrao?.trim()) {
-      setWppStatus({ type: 'error', message: 'Preencha a mensagem de aniversário.' });
+    if (!form.mensagem_padrao?.trim() && !attachment) {
+      setWppStatus({ type: 'error', message: 'Preencha a mensagem ou selecione um anexo.' });
       return;
     }
 
     setSendingWpp(true);
     setWppStatus(null);
+    setUploadingAttachment(true);
 
     try {
+      let mediaUrl = null;
+      let mediaType = null;
+
+      if (attachment) {
+        const ext = attachment.name.split('.').pop();
+        const filename = `attachments/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('wpp-attachments')
+          .upload(filename, attachment, { upsert: true });
+
+        if (uploadError) throw new Error(`Falha no upload do anexo: ${uploadError.message}`);
+
+        const { data: urlData } = supabase.storage.from('wpp-attachments').getPublicUrl(filename);
+        mediaUrl = urlData.publicUrl;
+        
+        mediaType = attachment.type.startsWith('image/') ? 'image' : 'document';
+      }
+
+      setUploadingAttachment(false);
+
       const { data, error: funcError } = await supabase.functions.invoke('send-custom-wpp', {
         body: {
           phone: form.phone,
           fullName: form.full_name || 'Contato',
           personId: form.id || null,
-          message: form.mensagem_padrao
+          tableName: 'pessoa',
+          message: form.mensagem_padrao || '',
+          mediaUrl,
+          mediaType,
+          fileName: attachment?.name || null
         }
       });
 
       if (funcError) throw funcError;
 
       setWppStatus({ type: 'success', message: 'Mensagem enviada com sucesso!' });
+      setAttachment(null);
       
       setTimeout(() => {
         setWppStatus(null);
@@ -142,6 +173,7 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
       });
     } finally {
       setSendingWpp(false);
+      setUploadingAttachment(false);
     }
   };
 
@@ -684,30 +716,95 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="col-span-1 md:col-span-12">
-              <div className="flex justify-between items-center mb-1.5">
+              <div className="flex justify-between items-center mb-1.5 flex-wrap gap-2">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Mensagens diversas / Mensagem de Aniversário
                 </label>
-                <button
-                  type="button"
-                  onClick={handleSendInstantWpp}
-                  disabled={sendingWpp || !form.phone || !form.mensagem_padrao?.trim()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-400 rounded-md text-xs font-semibold shadow-sm transition-all enabled:hover:scale-[1.02] enabled:active:scale-95 disabled:opacity-60"
-                  title={!form.phone || !form.mensagem_padrao?.trim() ? "Preencha o telefone e a mensagem para poder enviar" : "Enviar mensagem de aniversário agora pelo WhatsApp"}
-                >
-                  {sendingWpp ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Enviando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-3 w-3" />
-                      <span>Enviar WhatsApp</span>
-                    </>
-                  )}
-                </button>
+                
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    ref={wppFileInputRef}
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) setAttachment(file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => wppFileInputRef.current?.click()}
+                    disabled={sendingWpp}
+                    className="inline-flex items-center justify-center p-2 text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
+                    title="Anexar Imagem ou Documento"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendInstantWpp}
+                    disabled={sendingWpp || !form.phone || (!form.mensagem_padrao?.trim() && !attachment)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-400 rounded-md text-xs font-semibold shadow-sm transition-all enabled:hover:scale-[1.02] enabled:active:scale-95 disabled:opacity-60"
+                    title={!form.phone || (!form.mensagem_padrao?.trim() && !attachment) ? "Preencha o telefone e a mensagem ou anexo para poder enviar" : "Enviar mensagem pelo WhatsApp agora"}
+                  >
+                    {sendingWpp ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>{uploadingAttachment ? 'Enviando Anexo...' : 'Enviando...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-3 w-3" />
+                        <span>Enviar WhatsApp</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
+
+              {/* Preview do Anexo */}
+              <AnimatePresence>
+                {attachment && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden mb-2"
+                  >
+                    <div className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {attachment.type.startsWith('image/') ? (
+                          <img
+                            src={URL.createObjectURL(attachment)}
+                            alt="Preview do Anexo"
+                            className="h-8 w-8 rounded object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                          />
+                        ) : (
+                          <div className="h-8 w-8 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shrink-0">
+                            DOC
+                          </div>
+                        )}
+                        <span className="text-slate-700 dark:text-slate-300 font-medium truncate">
+                          {attachment.name}
+                        </span>
+                        <span className="text-slate-400 shrink-0">
+                          ({(attachment.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAttachment(null)}
+                        className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-red-500 transition-colors"
+                        title="Remover Anexo"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <textarea value={form.mensagem_padrao || ''} onChange={e => { setForm({ ...form, mensagem_padrao: e.target.value }); if (wppStatus) setWppStatus(null); }} rows={2}
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
               <AnimatePresence>
