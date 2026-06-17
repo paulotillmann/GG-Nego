@@ -23,6 +23,7 @@ export interface PessoaMapInfo {
   full_name: string;
   phone: string;
   atendimento_humano: boolean;
+  type: 'Pessoa' | 'Dependente';
 }
 
 const STATUS_CONFIG = {
@@ -65,9 +66,10 @@ const AtendimentoScreen: React.FC = () => {
   const fetchData = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     
-    const [atendRes, pessoasRes] = await Promise.all([
+    const [atendRes, pessoasRes, dependentesRes] = await Promise.all([
       supabase.from('atendimento').select('*').order('created_at', { ascending: false }),
-      supabase.from('pessoa').select('id, phone, full_name, atendimento_humano')
+      supabase.from('pessoa').select('id, phone, full_name, atendimento_humano'),
+      supabase.from('dependentes').select('id, phone, full_name, atendimento_humano').not('phone', 'is', null)
     ]);
     
     if (atendRes.error) {
@@ -76,17 +78,43 @@ const AtendimentoScreen: React.FC = () => {
       setAtendimentos(atendRes.data as Atendimento[]);
     }
 
+    const pMap: Record<string, PessoaMapInfo> = {};
+
     if (!pessoasRes.error && pessoasRes.data) {
-      const pMap: Record<string, PessoaMapInfo> = {};
       pessoasRes.data.forEach(p => {
         if (p.phone && p.full_name) {
           const clean = p.phone.replace(/\D/g, '');
-          pMap[clean] = p as PessoaMapInfo;
-          pMap[p.phone] = p as PessoaMapInfo;
+          const info: PessoaMapInfo = {
+            id: p.id,
+            full_name: p.full_name,
+            phone: p.phone,
+            atendimento_humano: !!p.atendimento_humano,
+            type: 'Pessoa'
+          };
+          pMap[clean] = info;
+          pMap[p.phone] = info;
         }
       });
-      setPessoasMap(pMap);
     }
+
+    if (!dependentesRes.error && dependentesRes.data) {
+      dependentesRes.data.forEach(d => {
+        if (d.phone && d.full_name) {
+          const clean = d.phone.replace(/\D/g, '');
+          const info: PessoaMapInfo = {
+            id: d.id,
+            full_name: d.full_name,
+            phone: d.phone,
+            atendimento_humano: !!d.atendimento_humano,
+            type: 'Dependente'
+          };
+          if (!pMap[clean]) pMap[clean] = info;
+          if (!pMap[d.phone]) pMap[d.phone] = info;
+        }
+      });
+    }
+
+    setPessoasMap(pMap);
 
     if (showLoading) setLoading(false);
   }, []);
@@ -597,7 +625,11 @@ const AtendimentoScreen: React.FC = () => {
                           if (newMap[person.phone]) newMap[person.phone] = { ...newMap[person.phone], atendimento_humano: newValue };
                           return newMap;
                         });
-                        const { error } = await supabase.from('pessoa').update({ atendimento_humano: newValue }).eq('id', person.id);
+                        const targetTable = person.type === 'Pessoa' ? 'pessoa' : 'dependentes';
+                        const { error } = await supabase.from(targetTable).update({ 
+                          atendimento_humano: newValue,
+                          atendimento_humano_reset_em: null 
+                        }).eq('id', person.id);
                         if (error) {
                           console.error("Erro ao atualizar atendimento humano:", error);
                           alert("Não foi possível alterar o status.");

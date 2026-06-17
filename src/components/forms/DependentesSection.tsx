@@ -22,6 +22,8 @@ interface Dependente {
   created_at: string;
   gender?: string | null;
   mensagem_padrao?: string | null;
+  atendimento_humano?: boolean;
+  atendimento_humano_reset_em?: string | null;
 }
 
 const DEFAULT_DEP: Omit<Dependente, 'id' | 'pessoa_id' | 'created_at'> = {

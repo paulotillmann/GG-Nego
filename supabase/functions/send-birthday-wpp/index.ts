@@ -100,7 +100,11 @@ async function processBirthdays(targetId?: string, isAutomatic = false) {
       
       const targetTable = person.tipo === 'Pessoa' ? 'pessoa' : 'dependentes';
       await supabase.from(targetTable)
-        .update({ wpp_aniversario_enviado_em: new Date().toISOString() })
+        .update({ 
+          wpp_aniversario_enviado_em: new Date().toISOString(),
+          atendimento_humano: true,
+          atendimento_humano_reset_em: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        })
         .eq('id', person.id);
 
       await supabase.from('activity_logs').insert({
