@@ -75,7 +75,7 @@ async function processBirthdays(targetId?: string, isAutomatic = false) {
     }
   }
   
-  const { data: aniversariantes, error } = await supabase.rpc('get_aniversariantes_hoje');
+  const { data: aniversariantes, error } = await supabase.rpc('get_aniversariantes_hoje_v2');
   
   if (error) {
     console.error("Error fetching birthdays:", error);

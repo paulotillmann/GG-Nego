@@ -162,7 +162,7 @@ const PeopleScreen: React.FC = () => {
 
   const fetchBirthdays = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc('get_aniversariantes_hoje');
+      const { data, error } = await supabase.rpc('get_aniversariantes_hoje_v2');
       if (error) throw error;
       setBirthdayList(data || []);
     } catch (err: any) {
@@ -1537,6 +1537,8 @@ const PeopleScreen: React.FC = () => {
       if (error) throw new Error(error.message || 'Falha ao enviar mensagem');
       
       showSuccess(`Mensagem enviada com sucesso para ${targetId ? 'o contato' : 'todos'}.`);
+      fetchBirthdays();
+      fetchData();
     } catch (err: any) {
       console.error(err);
       alert('Erro ao disparar WhatsApp: ' + err.message);
@@ -2426,13 +2428,14 @@ const PeopleScreen: React.FC = () => {
                       <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Nome</th>
                       <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Telefone</th>
                       <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
+                      <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Envio</th>
                       <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase text-right">Ação</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {birthdayList.length === 0 ? (
                       <tr>
-                         <td colSpan={4} className="py-8 text-center text-slate-500 text-sm">Nenhum aniversariante hoje.</td>
+                         <td colSpan={5} className="py-8 text-center text-slate-500 text-sm">Nenhum aniversariante hoje.</td>
                       </tr>
                     ) : (
                       birthdayList.map(b => (
@@ -2449,6 +2452,20 @@ const PeopleScreen: React.FC = () => {
                             </div>
                           </td>
                           <td className="py-3 px-4 text-sm"><span className="px-2 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-md text-xs">{b.tipo}</span></td>
+                          <td className="py-3 px-4 text-sm">
+                            {b.wpp_aniversario_enviado_em ? (
+                              <div className="inline-flex flex-col items-center justify-center bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800/30 shadow-sm min-w-[90px]">
+                                <span className="text-xs font-semibold whitespace-nowrap">
+                                  {new Date(b.wpp_aniversario_enviado_em).toLocaleDateString('pt-BR')}
+                                </span>
+                                <span className="text-[10px] font-medium opacity-80 whitespace-nowrap">
+                                  {new Date(b.wpp_aniversario_enviado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 dark:text-slate-600">—</span>
+                            )}
+                          </td>
                           <td className="py-3 px-4 text-right">
                              <button
                                onClick={() => handleSendWhatsApp(b.id)}
