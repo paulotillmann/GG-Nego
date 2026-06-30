@@ -2139,7 +2139,7 @@ const PeopleScreen: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400 truncate max-w-[200px]">
+                    <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
                       {p.address ? `${p.address}${p.address_number ? `, ${p.address_number}` : ''}` : '—'}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
@@ -2183,7 +2183,7 @@ const PeopleScreen: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400 hidden lg:table-cell">
-                      {p.profiles?.full_name || '—'}
+                      {p.profiles?.full_name?.split(' ')[0] || '—'}
                     </td>
                     <td className="py-4 px-6 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end space-x-2">
