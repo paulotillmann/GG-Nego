@@ -665,8 +665,6 @@ const PeopleScreen: React.FC = () => {
             <thead>
               <tr>
                 <th>Nome Completo</th>
-                <th>CPF</th>
-                <th>Sexo</th>
                 <th>Data Nasc.</th>
                 <th>Parentesco</th>
                 <th>Telefone</th>
@@ -677,8 +675,6 @@ const PeopleScreen: React.FC = () => {
               ${dependentes.map(dep => `
                 <tr>
                   <td>${dep.full_name}${dep.is_deceased ? ' (FALECIDO/A)' : ''}</td>
-                  <td>${dep.cpf ? maskCPF(dep.cpf) : '—'}</td>
-                  <td>${dep.gender || 'Não definido'}</td>
                   <td>${formatDate(dep.birth_date) || '—'}${dep.birth_date ? ` (${calculateAge(dep.birth_date)})` : ''}</td>
                   <td>${dep.kinship || '—'}</td>
                   <td>${dep.phone ? maskPhone(dep.phone) : '—'}</td>
@@ -991,8 +987,6 @@ const PeopleScreen: React.FC = () => {
               <thead>
                 <tr>
                   <th>Nome Completo</th>
-                  <th>CPF</th>
-                  <th>Sexo</th>
                   <th>Data Nasc.</th>
                   <th>Parentesco</th>
                   <th>Telefone</th>
@@ -1003,8 +997,6 @@ const PeopleScreen: React.FC = () => {
                 ${dependentes.map((dep: any) => `
                   <tr>
                     <td>${dep.full_name}${dep.is_deceased ? ' (FALECIDO/A)' : ''}</td>
-                    <td>${dep.cpf ? maskCPF(dep.cpf) : '—'}</td>
-                    <td>${dep.gender || 'Não definido'}</td>
                     <td>${formatDate(dep.birth_date) || '—'}${dep.birth_date ? ` (${calculateAge(dep.birth_date)})` : ''}</td>
                     <td>${dep.kinship || '—'}</td>
                     <td>${dep.phone ? maskPhone(dep.phone) : '—'}</td>
