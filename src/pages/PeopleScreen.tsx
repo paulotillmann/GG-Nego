@@ -843,16 +843,8 @@ const PeopleScreen: React.FC = () => {
                    <div class="label">Nascimento</div>
                    <div class="value">${formatDate(person.birth_date) || ''}${person.birth_date ? ` (${calculateAge(person.birth_date)})` : ''}</div>
                  </div>
-                 <div class="field">
-                   <div class="label">Sexo</div>
-                   <div class="value">${person.gender || 'Não definido'}</div>
-                 </div>
               </div>
               <div class="row">
-                <div class="field">
-                  <div class="label">CPF</div>
-                  <div class="value">${person.cpf ? maskCPF(person.cpf) : ''}</div>
-                </div>
                 <div class="field">
                   <div class="label">CNPJ</div>
                   <div class="value">${person.cnpj ? maskCNPJ(person.cnpj) : ''}</div>
@@ -1082,16 +1074,8 @@ const PeopleScreen: React.FC = () => {
                 <div class="label">Nascimento</div>
                 <div class="value">${formatDate(person.birth_date) || ''}${person.birth_date ? ` (${calculateAge(person.birth_date)})` : ''}</div>
               </div>
-              <div class="field">
-                <div class="label">Sexo</div>
-                <div class="value">${person.gender || 'Não definido'}</div>
-              </div>
             </div>
             <div class="row">
-              <div class="field">
-                <div class="label">CPF</div>
-                <div class="value">${person.cpf ? maskCPF(person.cpf) : ''}</div>
-              </div>
               <div class="field">
                 <div class="label">CNPJ</div>
                 <div class="value">${person.cnpj ? maskCNPJ(person.cnpj) : ''}</div>
