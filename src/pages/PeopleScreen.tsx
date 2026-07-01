@@ -459,11 +459,28 @@ const PeopleScreen: React.FC = () => {
     let labelItems: LabelItem[] = [];
 
     if (labelTarget === 'titular') {
-      if (sorted.length === 0) {
+      let filteredTitulars = sorted;
+      if (filterBirthdayMonth) {
+        filteredTitulars = sorted.filter(person => {
+          if (!person.birth_date) return false;
+          const parts = person.birth_date.split('-');
+          return parts.length === 3 && parts[1] === filterBirthdayMonth;
+        });
+
+        // Sort by day of the month
+        filteredTitulars.sort((a, b) => {
+          const dayA = parseInt(a.birth_date!.split('-')[2], 10);
+          const dayB = parseInt(b.birth_date!.split('-')[2], 10);
+          return dayA - dayB;
+        });
+      }
+
+      if (filteredTitulars.length === 0) {
         alert("Nenhum registro de titular encontrado para gerar etiquetas.");
         return;
       }
-      labelItems = sorted.map(person => ({
+
+      labelItems = filteredTitulars.map(person => ({
         name: person.full_name,
         destino: person.destino,
         pronoun: person.pronoun,
@@ -474,24 +491,49 @@ const PeopleScreen: React.FC = () => {
         cep: person.cep
       }));
     } else {
+      const activeDeps: any[] = [];
       sorted.forEach(person => {
         if (person.dependentes && person.dependentes.length > 0) {
           person.dependentes.forEach(dep => {
-            if (!dep.is_deceased) {
-              labelItems.push({
-                name: dep.full_name,
-                destino: null,
-                pronoun: null,
-                address: person.address,
-                address_number: person.address_number,
-                neighborhood: person.neighborhood,
-                city: person.city,
-                cep: person.cep
+            if (dep.is_deceased) return;
+
+            // If month filter is active, only include if dependent's birthday matches the month
+            if (filterBirthdayMonth) {
+              if (!dep.birth_date) return;
+              const parts = dep.birth_date.split('-');
+              if (parts.length !== 3 || parts[1] !== filterBirthdayMonth) return;
+
+              activeDeps.push({
+                dep,
+                person,
+                day: parseInt(parts[2], 10)
+              });
+            } else {
+              activeDeps.push({
+                dep,
+                person,
+                day: 0
               });
             }
           });
         }
       });
+
+      if (filterBirthdayMonth) {
+        // Sort dependents by birth day
+        activeDeps.sort((a, b) => a.day - b.day);
+      }
+
+      labelItems = activeDeps.map(({ dep, person }) => ({
+        name: dep.full_name,
+        destino: null,
+        pronoun: null,
+        address: person.address,
+        address_number: person.address_number,
+        neighborhood: person.neighborhood,
+        city: person.city,
+        cep: person.cep
+      }));
 
       if (labelItems.length === 0) {
         alert("Nenhum dependente ativo encontrado para gerar etiquetas.");
@@ -1275,26 +1317,87 @@ const PeopleScreen: React.FC = () => {
     if (filterType) filterTexts.push(`Tipo: ${filterType}`);
     if (filterCity) filterTexts.push(`Cidade: ${filterCity}`);
     if (filterNeighborhood) filterTexts.push(`Bairro: ${filterNeighborhood}`);
+    if (filterBirthdayMonth) {
+      const monthLabel = MONTHS.find(m => m.value === filterBirthdayMonth)?.label || filterBirthdayMonth;
+      filterTexts.push(`Aniversariantes do Mês: ${monthLabel}`);
+    }
     const filterString = filterTexts.length > 0 ? `Filtros aplicados - ${filterTexts.join(' | ')}` : 'Nenhum filtro aplicado (Todos os registros)';
     
     // Table
-    const tableData = sorted.map(p => {
-      const telefones = [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ');
-      return [
-        (p.full_name || '') + (p.is_deceased ? ' (FALECIDO/A)' : ''),
-        p.person_type || '',
-        telefones || '—',
-        p.address || '',
-        p.neighborhood || '',
-        p.city || '',
-        p.birth_date ? `${formatDate(p.birth_date)} (${calculateAge(p.birth_date)})` : '—',
-        p.profiles?.full_name || '—'
-      ];
-    });
+    let tableData = [];
+    if (filterBirthdayMonth) {
+      const birthdayPeople: any[] = [];
+      sorted.forEach(p => {
+        const fullAddress = p.address ? `${p.address}${p.address_number ? `, ${p.address_number}` : ''}` : '—';
+        // Titular matches
+        if (p.birth_date) {
+          const parts = p.birth_date.split('-');
+          if (parts.length === 3 && parts[1] === filterBirthdayMonth) {
+            birthdayPeople.push({
+              name: (p.full_name || '') + (p.is_deceased ? ' (FALECIDO/A)' : ''),
+              type: p.person_type || 'Titular',
+              telefones: [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ') || '—',
+              address: fullAddress,
+              neighborhood: p.neighborhood || '',
+              city: p.city || '',
+              formattedBirthDate: `${formatDate(p.birth_date)} (${calculateAge(p.birth_date)})`,
+              day: parseInt(parts[2], 10)
+            });
+          }
+        }
+        // Dependents match
+        if (p.dependentes && p.dependentes.length > 0) {
+          p.dependentes.forEach((dep: any) => {
+            if (dep.is_deceased || !dep.birth_date) return;
+            const parts = dep.birth_date.split('-');
+            if (parts.length === 3 && parts[1] === filterBirthdayMonth) {
+              const depPhone = dep.phone ? maskPhone(dep.phone) : [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ');
+              birthdayPeople.push({
+                name: `${dep.full_name || ''} (Dep. de ${p.full_name || ''})`,
+                type: dep.kinship || 'Dependente',
+                telefones: depPhone || '—',
+                address: fullAddress,
+                neighborhood: p.neighborhood || '',
+                city: p.city || '',
+                formattedBirthDate: `${formatDate(dep.birth_date)} (${calculateAge(dep.birth_date)})`,
+                day: parseInt(parts[2], 10)
+              });
+            }
+          });
+        }
+      });
+
+      // Sort birthday people by day
+      birthdayPeople.sort((a, b) => a.day - b.day);
+
+      tableData = birthdayPeople.map(item => [
+        item.name,
+        item.type,
+        item.telefones,
+        item.address,
+        item.neighborhood,
+        item.city,
+        item.formattedBirthDate
+      ]);
+    } else {
+      tableData = sorted.map(p => {
+        const telefones = [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ');
+        const fullAddress = p.address ? `${p.address}${p.address_number ? `, ${p.address_number}` : ''}` : '—';
+        return [
+          (p.full_name || '') + (p.is_deceased ? ' (FALECIDO/A)' : ''),
+          p.person_type || '',
+          telefones || '—',
+          fullAddress,
+          p.neighborhood || '',
+          p.city || '',
+          p.birth_date ? `${formatDate(p.birth_date)} (${calculateAge(p.birth_date)})` : '—'
+        ];
+      });
+    }
 
     autoTable(doc, {
       startY: 32,
-      head: [['Nome / Razão Social', 'Tipo', 'Telefone', 'Endereço', 'Bairro', 'Cidade', 'Nascimento', 'Cadastrado por']],
+      head: [['Nome / Razão Social', 'Tipo', 'Telefone', 'Endereço', 'Bairro', 'Cidade', 'Nascimento']],
       body: tableData,
       theme: 'striped',
       styles: { fontSize: 8, cellPadding: 2 },
@@ -1306,7 +1409,10 @@ const PeopleScreen: React.FC = () => {
         doc.setTextColor(0);
         doc.setFontSize(14);
         doc.setFont("helvetica", "bold");
-        doc.text("RELAÇÃO DE PESSOAS E ENTIDADES", 14, 15);
+        const titleText = filterBirthdayMonth 
+          ? `RELAÇÃO DE ANIVERSARIANTES DO MÊS - ${MONTHS.find(m => m.value === filterBirthdayMonth)?.label.toUpperCase()}`
+          : "RELAÇÃO DE PESSOAS E ENTIDADES";
+        doc.text(titleText, 14, 15);
         
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");

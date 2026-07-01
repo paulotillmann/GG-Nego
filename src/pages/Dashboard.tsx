@@ -44,7 +44,184 @@ const TIPO_BADGE: Record<string, { color: string; dot: string }> = {
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+const getAge = (birthDateStr: string | null | undefined) => {
+  if (!birthDateStr) return null;
+  const parts = birthDateStr.split('-');
+  if (parts.length !== 3) return null;
+  const birthYear = parseInt(parts[0], 10);
+  const birthMonth = parseInt(parts[1], 10) - 1;
+  const birthDay = parseInt(parts[2], 10);
+  
+  if (isNaN(birthYear) || isNaN(birthMonth) || isNaN(birthDay)) return null;
+  
+  const today = new Date();
+  let age = today.getFullYear() - birthYear;
+  const m = today.getMonth() - birthMonth;
+  if (m < 0 || (m === 0 && today.getDate() < birthDay)) {
+    age--;
+  }
+  return age;
+};
+
 type ChartView = 'month' | 'week';
+
+// ─── Chart Components ────────────────────────────────────────────────────────
+interface DoughnutChartProps {
+  title: string;
+  subtitle: string;
+  data: { label: string; count: number; color: string }[];
+}
+
+const DoughnutChart: React.FC<DoughnutChartProps> = ({ title, subtitle, data }) => {
+  const total = data.reduce((acc, curr) => acc + curr.count, 0);
+  const activeSlices = data.filter(s => s.count > 0);
+  const gap = activeSlices.length > 1 ? 8 : 0;
+  
+  const radius = 40;
+  const strokeWidth = 10;
+  const circumference = 2 * Math.PI * radius;
+  
+  let accumulatedOffset = 0;
+
+  return (
+    <div className="bg-white dark:bg-[#1C2434] rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between h-full hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+      <div>
+        <h3 className="text-lg font-heading font-semibold text-slate-900 dark:text-white mb-1">
+          {title}
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
+          {subtitle}
+        </p>
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-6 xl:gap-8 my-auto">
+        <div className="relative w-[148px] h-[148px] shrink-0">
+          {total === 0 ? (
+            <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                fill="transparent"
+                stroke="#E2E8F0"
+                strokeWidth={strokeWidth}
+                className="dark:stroke-slate-800"
+              />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              {activeSlices.map((slice, i) => {
+                const percentage = slice.count / total;
+                const rawLength = percentage * circumference;
+                const sliceLength = Math.max(2, rawLength - gap);
+                const offset = accumulatedOffset;
+                accumulatedOffset += rawLength;
+
+                return (
+                  <circle
+                    key={i}
+                    cx="50"
+                    cy="50"
+                    r={radius}
+                    fill="transparent"
+                    stroke={slice.color}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={`${sliceLength} ${circumference}`}
+                    strokeDashoffset={-offset}
+                    strokeLinecap="round"
+                    transform="rotate(-90 50 50)"
+                    className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
+                  />
+                );
+              })}
+            </svg>
+          )}
+
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="text-2xl font-bold font-heading text-slate-800 dark:text-white">
+              {total}
+            </span>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
+              Total
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-1 w-full space-y-2">
+          {data.map((item, i) => {
+            const pct = total > 0 ? ((item.count / total) * 100).toFixed(1) : '0.0';
+            return (
+              <div key={i} className="flex items-center justify-between text-xs sm:text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-slate-600 dark:text-slate-300 truncate font-medium">
+                    {item.label}
+                  </span>
+                </div>
+                <div className="text-slate-500 dark:text-slate-400 font-semibold shrink-0 text-right">
+                  {item.count} <span className="text-[10px] sm:text-xs font-normal opacity-75">({pct}%)</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface BairroChartProps {
+  title: string;
+  subtitle: string;
+  data: { neighborhood: string; count: number; percentage: number }[];
+}
+
+const BairroChart: React.FC<BairroChartProps> = ({ title, subtitle, data }) => {
+  return (
+    <div className="bg-white dark:bg-[#1C2434] rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between h-full hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+      <div>
+        <h3 className="text-lg font-heading font-semibold text-slate-900 dark:text-white mb-1">
+          {title}
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
+          {subtitle}
+        </p>
+      </div>
+
+      <div className="space-y-4 my-auto">
+        {data.length === 0 ? (
+          <div className="text-center text-xs sm:text-sm text-slate-400 dark:text-slate-500 py-8">
+            Nenhum dado de bairro registrado.
+          </div>
+        ) : (
+          data.map((item, i) => (
+            <div key={i} className="space-y-1">
+              <div className="flex items-center justify-between text-xs sm:text-sm font-medium">
+                <span className="text-slate-700 dark:text-slate-200 truncate pr-2">
+                  {item.neighborhood}
+                </span>
+                <span className="text-slate-500 dark:text-slate-400 font-semibold shrink-0">
+                  {item.count} <span className="text-[10px] sm:text-xs font-normal opacity-75">({item.percentage.toFixed(1)}%)</span>
+                </span>
+              </div>
+              <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${item.percentage}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut', delay: i * 0.05 }}
+                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-500 rounded-full"
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
 
 const Dashboard: React.FC = () => {
   const { profile } = useAuth();
@@ -56,6 +233,11 @@ const Dashboard: React.FC = () => {
   const [weeklyData, setWeeklyData] = useState<MonthlyData[]>([]);
   const [chartView, setChartView] = useState<ChartView>('week');
 
+  // Novos Estados para Demografia e Bairros
+  const [genderData, setGenderData] = useState<{ label: string; count: number; color: string }[]>([]);
+  const [ageData, setAgeData] = useState<{ label: string; count: number; color: string }[]>([]);
+  const [neighborhoodData, setNeighborhoodData] = useState<{ neighborhood: string; count: number; percentage: number }[]>([]);
+
   // Calendar State
   const [calYear, setCalYear] = useState(new Date().getFullYear());
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
@@ -66,8 +248,16 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       try {
         // Person Data
-        const { data: pessoaData, error: pessoaError } = await supabase.from('pessoa').select('created_at');
+        const { data: pessoaData, error: pessoaError } = await supabase
+          .from('pessoa')
+          .select('created_at, gender, birth_date, neighborhood');
         if (pessoaError) throw pessoaError;
+
+        // Dependentes Data
+        const { data: dependentesData, error: dependentesError } = await supabase
+          .from('dependentes')
+          .select('gender, birth_date');
+        if (dependentesError) throw dependentesError;
         
         // Requerimentos Count
         const { count: reqCount, error: reqError } = await supabase.from('requerimento').select('*', { count: 'exact', head: true });
@@ -86,7 +276,7 @@ const Dashboard: React.FC = () => {
         if (agendaError) throw agendaError;
         
         const rows = pessoaData || [];
-        let total = 0;
+        let total = (pessoaData || []).length + (dependentesData || []).length;
         let monthCount = 0;
         let weekCount = 0;
 
@@ -110,7 +300,6 @@ const Dashboard: React.FC = () => {
         }
 
         rows.forEach(p => {
-          total++;
           const d = new Date(p.created_at);
           
           if (isThisMonth(d)) monthCount++;
@@ -139,9 +328,139 @@ const Dashboard: React.FC = () => {
           count: d.count
         }));
 
+        // ─── Processamento dos Dados Demográficos ─────────────────────────────────
+        // 1. Sexo (Pessoas + Dependentes)
+        const genderCounts: Record<string, number> = {
+          'Feminino': 0,
+          'Masculino': 0,
+          'Não definido': 0
+        };
+
+        const addGender = (g: string | null | undefined) => {
+          const formatted = g?.trim();
+          if (formatted === 'Feminino' || formatted === 'Masculino') {
+            genderCounts[formatted]++;
+          } else {
+            genderCounts['Não definido']++;
+          }
+        };
+
+        rows.forEach(p => addGender(p.gender));
+        (dependentesData || []).forEach(d => addGender(d.gender));
+
+        const formattedGender = [
+          { label: 'Feminino', count: genderCounts['Feminino'], color: '#EC4899' },
+          { label: 'Masculino', count: genderCounts['Masculino'], color: '#3B82F6' },
+          { label: 'Não definido', count: genderCounts['Não definido'], color: '#94A3B8' }
+        ];
+
+        // 2. Faixa Etária (Pessoas + Dependentes)
+        const ageCounts: Record<string, number> = {
+          'De 0 a 15 anos': 0,
+          'De 16 a 19 anos': 0,
+          'De 20 a 29 anos': 0,
+          'De 30 a 39 anos': 0,
+          'De 40 a 49 anos': 0,
+          'De 50 a 59 anos': 0,
+          'De 60 a 79 anos': 0,
+          '80+ anos': 0,
+          'Não informado': 0
+        };
+
+        const processAge = (birthDateStr: string | null | undefined) => {
+          const age = getAge(birthDateStr);
+          if (age === null) {
+            ageCounts['Não informado']++;
+          } else if (age <= 15) {
+            ageCounts['De 0 a 15 anos']++;
+          } else if (age <= 19) {
+            ageCounts['De 16 a 19 anos']++;
+          } else if (age <= 29) {
+            ageCounts['De 20 a 29 anos']++;
+          } else if (age <= 39) {
+            ageCounts['De 30 a 39 anos']++;
+          } else if (age <= 49) {
+            ageCounts['De 40 a 49 anos']++;
+          } else if (age <= 59) {
+            ageCounts['De 50 a 59 anos']++;
+          } else if (age <= 79) {
+            ageCounts['De 60 a 79 anos']++;
+          } else {
+            ageCounts['80+ anos']++;
+          }
+        };
+
+        rows.forEach(p => processAge(p.birth_date));
+        (dependentesData || []).forEach(d => processAge(d.birth_date));
+
+        const formattedAge = [
+          { label: 'De 0 a 15 anos', count: ageCounts['De 0 a 15 anos'], color: '#38BDF8' },
+          { label: 'De 16 a 19 anos', count: ageCounts['De 16 a 19 anos'], color: '#06B6D4' },
+          { label: 'De 20 a 29 anos', count: ageCounts['De 20 a 29 anos'], color: '#14B8A6' },
+          { label: 'De 30 a 39 anos', count: ageCounts['De 30 a 39 anos'], color: '#3B82F6' },
+          { label: 'De 40 a 49 anos', count: ageCounts['De 40 a 49 anos'], color: '#6366F1' },
+          { label: 'De 50 a 59 anos', count: ageCounts['De 50 a 59 anos'], color: '#8B5CF6' },
+          { label: 'De 60 a 79 anos', count: ageCounts['De 60 a 79 anos'], color: '#D946EF' },
+          { label: '80+ anos', count: ageCounts['80+ anos'], color: '#EC4899' },
+          { label: 'Não informado', count: ageCounts['Não informado'], color: '#94A3B8' }
+        ];
+
+        // 3. Bairros (Apenas Pessoas)
+        const neighborhoodCounts: Record<string, number> = {};
+        let totalPessoas = rows.length;
+
+        rows.forEach(p => {
+          let b = p.neighborhood?.trim();
+          if (!b) {
+            b = 'Não informado';
+          } else {
+            b = b.split(' ').map((word: string) => {
+              if (['de', 'do', 'da', 'dos', 'das', 'e'].includes(word.toLowerCase())) {
+                return word.toLowerCase();
+              }
+              return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+            }).join(' ');
+          }
+          neighborhoodCounts[b] = (neighborhoodCounts[b] || 0) + 1;
+        });
+
+        const neighborhoodArr = Object.entries(neighborhoodCounts).map(([name, count]) => ({
+          neighborhood: name,
+          count
+        })).sort((a, b) => b.count - a.count);
+
+        const topN = 5;
+        let finalNeighborhoods: { neighborhood: string; count: number; percentage: number }[] = [];
+        let otherCount = 0;
+
+        neighborhoodArr.forEach((item, index) => {
+          if (index < topN) {
+            finalNeighborhoods.push({
+              neighborhood: item.neighborhood,
+              count: item.count,
+              percentage: totalPessoas > 0 ? (item.count / totalPessoas) * 100 : 0
+            });
+          } else {
+            otherCount += item.count;
+          }
+        });
+
+        if (otherCount > 0) {
+          finalNeighborhoods.push({
+            neighborhood: 'Outros',
+            count: otherCount,
+            percentage: totalPessoas > 0 ? (otherCount / totalPessoas) * 100 : 0
+          });
+        }
+
+        finalNeighborhoods.sort((a, b) => b.count - a.count);
+
         setStats({ total, thisMonth: monthCount, thisWeek: weekCount, reqCount: reqCount || 0 });
         setChartData(aggregatedChart);
         setWeeklyData(aggregatedWeekly);
+        setGenderData(formattedGender);
+        setAgeData(formattedAge);
+        setNeighborhoodData(finalNeighborhoods);
         setAgendaItems((agendaData ?? []) as AgendaItem[]);
 
       } catch (err) {
@@ -160,6 +479,9 @@ const Dashboard: React.FC = () => {
         fetchDashboardData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pessoa' }, () => {
+        fetchDashboardData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dependentes' }, () => {
         fetchDashboardData();
       })
       .subscribe();
@@ -291,6 +613,25 @@ const Dashboard: React.FC = () => {
             <span className="opacity-90">Cadastros nesta semana</span>
           </div>
         </motion.div>
+      </div>
+
+      {/* Gráficos Demográficos e de Bairros */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in fade-in duration-300">
+        <DoughnutChart
+          title="Distribuição por Sexo"
+          subtitle="Total acumulado de pessoas e dependentes"
+          data={genderData}
+        />
+        <DoughnutChart
+          title="Distribuição por Faixa Etária"
+          subtitle="Idade de pessoas e dependentes"
+          data={ageData}
+        />
+        <BairroChart
+          title="Pessoas por Bairro"
+          subtitle="Top bairros mais populosos na base"
+          data={neighborhoodData}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -513,7 +854,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-      
+
     </div>
   );
 };
