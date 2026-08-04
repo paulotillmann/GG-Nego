@@ -4,7 +4,7 @@ import {
   Search, Plus, Loader2, CheckCircle, MapPin,
   Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown,
   Users, ShieldCheck, Building2, Briefcase, Tag, FileText, Printer, Gift, Cake, ToggleLeft, ToggleRight,
-  Calendar, Heart, Send, AlertCircle, SlidersHorizontal
+  Calendar, Heart, Send, AlertCircle, SlidersHorizontal, Copy
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { maskPhone, maskCPF, maskCNPJ, removeAccents } from '../utils/validators';
@@ -1602,6 +1602,239 @@ const PeopleScreen: React.FC = () => {
     }
   };
 
+  const generateDuplicatesReport = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('pessoa')
+        .select('*, dependentes(*), profiles(full_name)')
+        .order('full_name', { ascending: true });
+
+      if (error) throw error;
+      const allPeople = (data || []) as Pessoa[];
+
+      const tableRows: string[][] = [];
+
+      const cleanDigits = (val?: string | null) => val ? val.replace(/\D/g, '') : '';
+      const normText = (val?: string | null) => val ? removeAccents(val.trim().toLowerCase()) : '';
+
+      // 1. Mapear Titulares por Nome, CPF, Telefone
+      const titularByNameMap: Record<string, Pessoa[]> = {};
+      const titularByCpfMap: Record<string, Pessoa[]> = {};
+      const titularByPhoneMap: Record<string, Pessoa[]> = {};
+
+      allPeople.forEach(p => {
+        const normName = normText(p.full_name);
+        if (normName) {
+          if (!titularByNameMap[normName]) titularByNameMap[normName] = [];
+          titularByNameMap[normName].push(p);
+        }
+
+        const cpf = cleanDigits(p.cpf);
+        if (cpf && cpf.length === 11) {
+          if (!titularByCpfMap[cpf]) titularByCpfMap[cpf] = [];
+          titularByCpfMap[cpf].push(p);
+        }
+
+        const phone = cleanDigits(p.phone);
+        if (phone && phone.length >= 8) {
+          if (!titularByPhoneMap[phone]) titularByPhoneMap[phone] = [];
+          titularByPhoneMap[phone].push(p);
+        }
+      });
+
+      // 2. Mapear Dependentes por Nome
+      interface DepWithTitular {
+        dep: any;
+        titular: Pessoa;
+      }
+      const depByNameMap: Record<string, DepWithTitular[]> = {};
+
+      allPeople.forEach(p => {
+        if (p.dependentes && p.dependentes.length > 0) {
+          p.dependentes.forEach((dep: any) => {
+            const normDepName = normText(dep.full_name);
+            if (normDepName) {
+              if (!depByNameMap[normDepName]) depByNameMap[normDepName] = [];
+              depByNameMap[normDepName].push({ dep, titular: p });
+            }
+          });
+        }
+      });
+
+      // Categoria A: Titulares Duplicados por Nome
+      Object.entries(titularByNameMap).forEach(([normName, group]) => {
+        if (group.length > 1) {
+          group.forEach(p => {
+            const telefones = [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ') || '—';
+            const cpfCnpj = p.cpf ? `CPF: ${maskCPF(p.cpf)}` : (p.cnpj ? `CNPJ: ${maskCNPJ(p.cnpj)}` : '—');
+            const local = [p.neighborhood, p.city].filter(Boolean).join(' - ') || '—';
+            tableRows.push([
+              'Titular (Mesmo Nome)',
+              p.person_type || 'Titular',
+              (p.full_name || '') + (p.is_deceased ? ' (FALECIDO/A)' : ''),
+              '—',
+              `${cpfCnpj} | ${telefones}`,
+              local
+            ]);
+          });
+        }
+      });
+
+      // Categoria B: Titulares Duplicados por CPF (com nomes diferentes)
+      Object.entries(titularByCpfMap).forEach(([cpf, group]) => {
+        if (group.length > 1) {
+          const uniqueNames = new Set(group.map(g => normText(g.full_name)));
+          if (uniqueNames.size > 1) {
+            group.forEach(p => {
+              const telefones = [p.phone ? maskPhone(p.phone) : null, p.telefone_extra ? maskPhone(p.telefone_extra) : null].filter(Boolean).join(' / ') || '—';
+              const local = [p.neighborhood, p.city].filter(Boolean).join(' - ') || '—';
+              tableRows.push([
+                `Titular (Mesmo CPF: ${maskCPF(cpf)})`,
+                p.person_type || 'Titular',
+                (p.full_name || '') + (p.is_deceased ? ' (FALECIDO/A)' : ''),
+                '—',
+                `CPF: ${maskCPF(cpf)} | ${telefones}`,
+                local
+              ]);
+            });
+          }
+        }
+      });
+
+      // Categoria C: Titulares Duplicados por Telefone (com nomes diferentes)
+      Object.entries(titularByPhoneMap).forEach(([phone, group]) => {
+        if (group.length > 1) {
+          const uniqueNames = new Set(group.map(g => normText(g.full_name)));
+          if (uniqueNames.size > 1) {
+            group.forEach(p => {
+              const cpfCnpj = p.cpf ? `CPF: ${maskCPF(p.cpf)}` : (p.cnpj ? `CNPJ: ${maskCNPJ(p.cnpj)}` : '—');
+              const local = [p.neighborhood, p.city].filter(Boolean).join(' - ') || '—';
+              tableRows.push([
+                `Titular (Mesmo Tel: ${maskPhone(phone)})`,
+                p.person_type || 'Titular',
+                (p.full_name || '') + (p.is_deceased ? ' (FALECIDO/A)' : ''),
+                '—',
+                `${cpfCnpj} | Tel: ${maskPhone(phone)}`,
+                local
+              ]);
+            });
+          }
+        }
+      });
+
+      // Categoria D: Dependentes Duplicados entre si
+      Object.entries(depByNameMap).forEach(([normName, group]) => {
+        if (group.length > 1) {
+          group.forEach(({ dep, titular }) => {
+            const local = [titular.neighborhood, titular.city].filter(Boolean).join(' - ') || '—';
+            tableRows.push([
+              'Dependente Duplicado',
+              `Dep. (${dep.kinship || 'Dependente'})`,
+              (dep.full_name || '') + (dep.is_deceased ? ' (FALECIDO/A)' : ''),
+              `Titular: ${titular.full_name}`,
+              dep.phone ? `Tel: ${maskPhone(dep.phone)}` : `Tel Titular: ${titular.phone ? maskPhone(titular.phone) : '—'}`,
+              local
+            ]);
+          });
+        }
+      });
+
+      // Categoria E: Conflito Titular x Dependente
+      Object.entries(depByNameMap).forEach(([normName, depGroup]) => {
+        const titularMatch = titularByNameMap[normName];
+        if (titularMatch && titularMatch.length > 0) {
+          depGroup.forEach(({ dep, titular }) => {
+            titularMatch.forEach(p => {
+              if (p.id !== titular.id) {
+                const localTitular = [p.neighborhood, p.city].filter(Boolean).join(' - ') || '—';
+                tableRows.push([
+                  'Conflito Titular x Dep.',
+                  'Cadastrado como Titular e Dependente',
+                  `Dep: ${dep.full_name}`,
+                  `Dep. de ${titular.full_name} / Reg. Titular ID`,
+                  p.phone ? `Tel: ${maskPhone(p.phone)}` : '—',
+                  localTitular
+                ]);
+              }
+            });
+          });
+        }
+      });
+
+      if (tableRows.length === 0) {
+        alert("Nenhum cadastro duplicado foi encontrado na base de dados!");
+        return;
+      }
+
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      autoTable(doc, {
+        startY: 32,
+        head: [['Critério de Duplicidade', 'Tipo / Categoria', 'Nome Registrado', 'Vínculo (Titular)', 'CPF / Telefone', 'Localidade']],
+        body: tableRows,
+        theme: 'striped',
+        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        columnStyles: {
+          0: { cellWidth: 50 },
+          1: { cellWidth: 35 },
+          2: { cellWidth: 60 },
+          3: { cellWidth: 50 },
+          4: { cellWidth: 45 },
+          5: { cellWidth: 'auto' }
+        },
+        headStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [254, 242, 242] },
+        margin: { top: 32, right: 10, bottom: 20, left: 10 },
+        didDrawPage: (data) => {
+          doc.setTextColor(0);
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          doc.text("RELATÓRIO DE CADASTROS DUPLICADOS", 10, 15);
+          
+          doc.setFontSize(12);
+          doc.setTextColor(220, 38, 38);
+          doc.text(`Registros Suspeitos: ${tableRows.length}`, 287, 15, { align: 'right' });
+          
+          doc.setTextColor(0);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text("GABINETE VEREADOR NEGO - AUDITORIA DE DADOS", 10, 21);
+          
+          doc.setFontSize(8);
+          doc.text(`Análise realizada em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 10, 27);
+
+          let str = `Página ${(doc.internal as any).getNumberOfPages()}`;
+          if (typeof doc.putTotalPages === 'function') {
+            str = str + ' de {total_pages_count_string}';
+          }
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(150);
+          const pageHeight = doc.internal.pageSize.height || (doc.internal.pageSize as any).getHeight();
+          doc.text(str, 10, pageHeight - 10);
+        }
+      });
+
+      if (typeof doc.putTotalPages === 'function') {
+        doc.putTotalPages('{total_pages_count_string}');
+      }
+
+      const pdfBlob = doc.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      window.open(pdfUrl, '_blank');
+    } catch (err: any) {
+      console.error("Erro ao gerar relatório de duplicados:", err);
+      alert("Erro ao gerar relatório de duplicados: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // fetchBirthdays is now memoized and called on mount
 
   const handleOpenBirthdayModal = () => {
@@ -1838,6 +2071,15 @@ const PeopleScreen: React.FC = () => {
                     className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
                   >
                     <Calendar className="h-4 w-4 mr-2.5 text-slate-400" /> Relatório por Nasc.
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      generateDuplicatesReport();
+                    }}
+                    className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
+                  >
+                    <Copy className="h-4 w-4 mr-2.5 text-slate-400" /> Relatório de duplicados
                   </button>
                   <button
                     onClick={() => {
@@ -2696,7 +2938,7 @@ const PeopleScreen: React.FC = () => {
                     <Send className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Enviar WhatsApp (Instância Dona Nega)</h3>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Enviar WhatsApp (Instância Nego)</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400">{selectedIds.length} contatos selecionados</p>
                   </div>
                 </div>

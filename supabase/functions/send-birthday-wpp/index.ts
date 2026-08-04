@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2"
 
 const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL") || "https://evolution.technocode.site";
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY") || "8GJGnDzDfDYQiMFabMWA3e8kFup8LkJY";
-const INSTANCE_NAME = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "Dona Nega";
+const INSTANCE_NAME = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "Nego";
 
 const getSupabase = () => {
   return createClient(
