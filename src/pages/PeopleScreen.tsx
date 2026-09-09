@@ -66,7 +66,7 @@ const PeopleScreen: React.FC = () => {
 
   // Label Modal state
   const [showLabelModal, setShowLabelModal] = useState(false);
-  const [labelTarget, setLabelTarget] = useState<'titular' | 'dependentes'>('titular');
+  const [labelTarget, setLabelTarget] = useState<'titular' | 'dependentes' | 'natal'>('titular');
   const [labelConfig, setLabelConfig] = useState({
     size: '100x50',
     paper: 'a4',
@@ -85,6 +85,14 @@ const PeopleScreen: React.FC = () => {
   const [reportStartDate, setReportStartDate] = useState('');
   const [reportEndDate, setReportEndDate] = useState('');
   const [reportLoading, setReportLoading] = useState(false);
+
+  // Services Report Modal state (Modelo 1)
+  const [showServicesReportModal, setShowServicesReportModal] = useState(false);
+  const [servicesReportStatus, setServicesReportStatus] = useState<'all' | 'attended' | 'pending'>('all');
+  const [servicesReportStartDate, setServicesReportStartDate] = useState('');
+  const [servicesReportEndDate, setServicesReportEndDate] = useState('');
+  const [servicesReportNeighborhood, setServicesReportNeighborhood] = useState('');
+  const [servicesReportLoading, setServicesReportLoading] = useState(false);
 
   // Bulk WhatsApp Modal state
   const [showBulkSmsModal, setShowBulkSmsModal] = useState(false);
@@ -458,7 +466,7 @@ const PeopleScreen: React.FC = () => {
 
     let labelItems: LabelItem[] = [];
 
-    if (labelTarget === 'titular') {
+    if (labelTarget === 'titular' || labelTarget === 'natal') {
       let filteredTitulars = sorted;
       if (filterBirthdayMonth) {
         filteredTitulars = sorted.filter(person => {
@@ -583,46 +591,85 @@ const PeopleScreen: React.FC = () => {
       const innerX = x + padding;
       let currentY = y + padding + 4;
       
-      // Se tiver setor (destino), imprime na primeira linha
-      if (item.destino) {
-        doc.setFontSize(8);
+      if (labelTarget === 'natal') {
+        // Linha 1 de Natal: "A Família do(a) [Pronome]"
+        doc.setFontSize(8.5);
         doc.setFont("helvetica", "bold");
-        const destinoText = doc.splitTextToSize(item.destino.toUpperCase(), labelWidth - 2 * padding);
-        doc.text(destinoText, innerX, currentY);
-        currentY += (destinoText.length * 3.5);
-      }
+        const pronounPart = item.pronoun ? ` ${item.pronoun}` : '';
+        const natalHeader = doc.splitTextToSize(`A Família do(a)${pronounPart}`, labelWidth - 2 * padding);
+        doc.text(natalHeader, innerX, currentY);
+        currentY += (natalHeader.length * 3.5);
 
-      if (item.pronoun) {
-        doc.setFontSize(8);
+        // Sem linha de destino/setor conforme especificação
+
+        // Nome do Titular
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        const nameText = doc.splitTextToSize((item.name || '').toUpperCase(), labelWidth - 2 * padding);
+        doc.text(nameText, innerX, currentY);
+        currentY += (nameText.length * 4.0);
+
+        // Endereço
+        doc.setFontSize(7);
         doc.setFont("helvetica", "normal");
-        const pronounText = doc.splitTextToSize(item.pronoun, labelWidth - 2 * padding);
-        doc.text(pronounText, innerX, currentY);
-        currentY += (pronounText.length * 3.5);
-      }
+        let addressLine = item.address || '';
+        if (item.address_number) addressLine += `, ${item.address_number}`;
+        if (item.neighborhood) addressLine += ` - ${item.neighborhood}`;
+        if (addressLine) {
+           const addressWrapped = doc.splitTextToSize(addressLine, labelWidth - 2 * padding);
+           doc.text(addressWrapped, innerX, currentY);
+           currentY += (addressWrapped.length * 3.0);
+        }
 
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      const nameText = doc.splitTextToSize((item.name || '').toUpperCase(), labelWidth - 2 * padding);
-      doc.text(nameText, innerX, currentY);
-      currentY += (nameText.length * 4.0);
-      
-      doc.setFontSize(7);
-      doc.setFont("helvetica", "normal");
-      
-      let addressLine = item.address || '';
-      if (item.address_number) addressLine += `, ${item.address_number}`;
-      if (item.neighborhood) addressLine += ` - ${item.neighborhood}`;
-      if (addressLine) {
-         const addressWrapped = doc.splitTextToSize(addressLine, labelWidth - 2 * padding);
-         doc.text(addressWrapped, innerX, currentY);
-         currentY += (addressWrapped.length * 3.0);
-      }
-      
-      let cityLine = item.city || '';
-      if (item.cep) cityLine += ` | CEP: ${item.cep}`;
-      if (cityLine) {
-         const cityWrapped = doc.splitTextToSize(cityLine, labelWidth - 2 * padding);
-         doc.text(cityWrapped, innerX, currentY);
+        // Cidade / CEP
+        let cityLine = item.city || '';
+        if (item.cep) cityLine += ` | CEP: ${item.cep}`;
+        if (cityLine) {
+           const cityWrapped = doc.splitTextToSize(cityLine, labelWidth - 2 * padding);
+           doc.text(cityWrapped, innerX, currentY);
+        }
+      } else {
+        // Se tiver setor (destino), imprime na primeira linha
+        if (item.destino) {
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "bold");
+          const destinoText = doc.splitTextToSize(item.destino.toUpperCase(), labelWidth - 2 * padding);
+          doc.text(destinoText, innerX, currentY);
+          currentY += (destinoText.length * 3.5);
+        }
+
+        if (item.pronoun) {
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "normal");
+          const pronounText = doc.splitTextToSize(item.pronoun, labelWidth - 2 * padding);
+          doc.text(pronounText, innerX, currentY);
+          currentY += (pronounText.length * 3.5);
+        }
+
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        const nameText = doc.splitTextToSize((item.name || '').toUpperCase(), labelWidth - 2 * padding);
+        doc.text(nameText, innerX, currentY);
+        currentY += (nameText.length * 4.0);
+        
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal");
+        
+        let addressLine = item.address || '';
+        if (item.address_number) addressLine += `, ${item.address_number}`;
+        if (item.neighborhood) addressLine += ` - ${item.neighborhood}`;
+        if (addressLine) {
+           const addressWrapped = doc.splitTextToSize(addressLine, labelWidth - 2 * padding);
+           doc.text(addressWrapped, innerX, currentY);
+           currentY += (addressWrapped.length * 3.0);
+        }
+        
+        let cityLine = item.city || '';
+        if (item.cep) cityLine += ` | CEP: ${item.cep}`;
+        if (cityLine) {
+           const cityWrapped = doc.splitTextToSize(cityLine, labelWidth - 2 * padding);
+           doc.text(cityWrapped, innerX, currentY);
+        }
       }
     });
 
@@ -647,14 +694,16 @@ const PeopleScreen: React.FC = () => {
     if (person.city) addressLine += ` - ${person.city}`;
     if (person.cep) addressLine += ` (CEP: ${person.cep})`;
 
-    // Buscar dependentes e serviços
-    const [{ data: dependentesData }, { data: servicosData }] = await Promise.all([
+    // Buscar dependentes, serviços e fotos
+    const [{ data: dependentesData }, { data: servicosData }, { data: fotosData }] = await Promise.all([
       supabase.from('dependentes').select('*').eq('pessoa_id', person.id).order('created_at', { ascending: true }),
-      supabase.from('servicos').select('*').eq('pessoa_id', person.id).order('service_date', { ascending: false })
+      supabase.from('servicos').select('*').eq('pessoa_id', person.id).order('service_date', { ascending: false }),
+      supabase.from('pessoa_fotos').select('*').eq('pessoa_id', person.id).order('created_at', { ascending: true })
     ]);
 
     const dependentes = dependentesData || [];
     const servicos = servicosData || [];
+    const fotos = fotosData || [];
 
     let dependentesHtml = '';
     if (dependentes.length > 0) {
@@ -710,6 +759,23 @@ const PeopleScreen: React.FC = () => {
               `).join('')}
             </tbody>
           </table>
+        </div>
+      `;
+    }
+
+    let fotosHtml = '';
+    if (fotos.length > 0) {
+      fotosHtml = `
+        <div class="section" style="break-inside: avoid; page-break-inside: avoid; margin-top: 15px;">
+          <div class="section-title">Fotos e Anexos (${fotos.length})</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px;">
+            ${fotos.map(foto => `
+              <div style="border: 1px solid #ccc; border-radius: 6px; padding: 6px; width: 135px; text-align: center; background: #fafafa; box-sizing: border-box;">
+                <img src="${foto.foto_url}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 4px; display: block; margin: 0 auto 4px;" />
+                <div style="font-size: 10px; color: #444; line-height: 1.2; word-break: break-word; font-weight: 500;">${foto.descricao || 'Sem descrição'}</div>
+              </div>
+            `).join('')}
+          </div>
         </div>
       `;
     }
@@ -930,6 +996,7 @@ const PeopleScreen: React.FC = () => {
             
             ${dependentesHtml}
             ${servicosHtml}
+            ${fotosHtml}
 
           </div>
         </body>
@@ -1602,6 +1669,388 @@ const PeopleScreen: React.FC = () => {
     }
   };
 
+  const generateServicesReport = async () => {
+    setServicesReportLoading(true);
+    try {
+      let query = supabase
+        .from('pessoa')
+        .select('id, full_name, phone, telefone_extra, neighborhood, city, address, address_number, cep, person_type, is_deceased, alterado_por, servicos(*)')
+        .order('full_name', { ascending: true });
+
+      if (servicesReportNeighborhood) {
+        query = query.eq('neighborhood', servicesReportNeighborhood);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Filtra as pessoas que possuem serviços dentro dos critérios selecionados
+      const peopleWithServices = (data ?? []).map((p: any) => {
+        let filteredServicos = (p.servicos ?? []).filter((s: any) => {
+          if (servicesReportStatus === 'attended' && !s.is_attended) return false;
+          if (servicesReportStatus === 'pending' && s.is_attended) return false;
+          if (servicesReportStartDate && s.service_date && s.service_date < servicesReportStartDate) return false;
+          if (servicesReportEndDate && s.service_date && s.service_date > servicesReportEndDate) return false;
+          return true;
+        });
+
+        // Ordena serviços da pessoa por data decrescente
+        filteredServicos.sort((a: any, b: any) => {
+          const dateA = a.service_date || '';
+          const dateB = b.service_date || '';
+          return dateB.localeCompare(dateA);
+        });
+
+        return {
+          ...p,
+          servicos: filteredServicos
+        };
+      }).filter((p: any) => p.servicos.length > 0);
+
+      if (peopleWithServices.length === 0) {
+        alert("Nenhum serviço encontrado com os filtros selecionados.");
+        setServicesReportLoading(false);
+        return;
+      }
+
+      // Totais gerais
+      const totalPessoas = peopleWithServices.length;
+      let totalServicos = 0;
+      let totalAtendidos = 0;
+      let totalPendentes = 0;
+
+      peopleWithServices.forEach((p: any) => {
+        totalServicos += p.servicos.length;
+        p.servicos.forEach((s: any) => {
+          if (s.is_attended) totalAtendidos++;
+          else totalPendentes++;
+        });
+      });
+
+      const formatDate = (ds?: string | null) => {
+        if (!ds) return '—';
+        const parts = ds.split('-');
+        return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : ds;
+      };
+
+      const statusFilterLabel = servicesReportStatus === 'attended' 
+        ? 'Apenas Atendidos' 
+        : servicesReportStatus === 'pending' 
+          ? 'Apenas Pendentes' 
+          : 'Todos os Status';
+
+      const periodLabel = (servicesReportStartDate || servicesReportEndDate)
+        ? `Período: ${formatDate(servicesReportStartDate)} até ${formatDate(servicesReportEndDate)}`
+        : 'Todo o histórico';
+
+      const neighbLabel = servicesReportNeighborhood ? `Bairro: ${servicesReportNeighborhood}` : 'Todos os bairros';
+
+      // Template HTML de Impressão (Modelo 1 - Agrupado por Pessoa)
+      const printHtml = `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8">
+          <title>Relatório de Serviços por Pessoa</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 12mm 10mm 12mm 10mm;
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+              color: #1e293b;
+              background: #fff;
+              margin: 0;
+              padding: 16px;
+              font-size: 11px;
+              line-height: 1.4;
+            }
+            .report-header {
+              border-bottom: 2px solid #0f172a;
+              padding-bottom: 10px;
+              margin-bottom: 12px;
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+            }
+            .report-title {
+              font-size: 18px;
+              font-weight: 800;
+              color: #0f172a;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+              margin: 0 0 4px 0;
+            }
+            .report-subtitle {
+              font-size: 10.5px;
+              color: #64748b;
+              margin: 0;
+            }
+            .report-meta {
+              text-align: right;
+              font-size: 10px;
+              color: #64748b;
+            }
+            .kpi-bar {
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              padding: 8px 14px;
+              margin-bottom: 14px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 8px;
+            }
+            .kpi-item {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              font-size: 11px;
+            }
+            .kpi-label {
+              color: #64748b;
+              font-weight: 600;
+            }
+            .kpi-value {
+              font-weight: 800;
+              color: #0f172a;
+            }
+            .badge-kpi-attended {
+              color: #166534;
+              background: #dcfce7;
+              padding: 2px 8px;
+              border-radius: 6px;
+              font-weight: 700;
+            }
+            .badge-kpi-pending {
+              color: #854d0e;
+              background: #fef9c3;
+              padding: 2px 8px;
+              border-radius: 6px;
+              font-weight: 700;
+            }
+            .person-card {
+              background: #ffffff;
+              border: 1px solid #cbd5e1;
+              border-radius: 8px;
+              margin-bottom: 12px;
+              break-inside: avoid;
+              page-break-inside: avoid;
+              overflow: hidden;
+            }
+            .person-header {
+              background: #f1f5f9;
+              border-bottom: 1px solid #cbd5e1;
+              padding: 8px 12px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 6px;
+            }
+            .person-name {
+              font-size: 12px;
+              font-weight: 700;
+              color: #0f172a;
+              text-transform: uppercase;
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            }
+            .person-type-tag {
+              font-size: 9px;
+              padding: 1px 6px;
+              border-radius: 4px;
+              background: #e2e8f0;
+              color: #334155;
+              font-weight: 600;
+              text-transform: uppercase;
+            }
+            .person-info {
+              font-size: 10px;
+              color: #475569;
+              display: flex;
+              gap: 12px;
+            }
+            .service-table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .service-table th {
+              background: #fafafa;
+              color: #475569;
+              font-size: 9.5px;
+              font-weight: 700;
+              text-transform: uppercase;
+              text-align: left;
+              padding: 6px 12px;
+              border-bottom: 1px solid #e2e8f0;
+            }
+            .service-table td {
+              padding: 6px 12px;
+              border-bottom: 1px solid #f1f5f9;
+              font-size: 11px;
+              vertical-align: top;
+            }
+            .service-table tr:last-child td {
+              border-bottom: none;
+            }
+            .service-date {
+              width: 90px;
+              font-weight: 600;
+              color: #334155;
+              white-space: nowrap;
+            }
+            .service-desc {
+              color: #1e293b;
+            }
+            .service-status {
+              width: 100px;
+              text-align: right;
+              white-space: nowrap;
+            }
+            .status-badge {
+              display: inline-block;
+              font-size: 9px;
+              font-weight: 700;
+              text-transform: uppercase;
+              padding: 2px 8px;
+              border-radius: 4px;
+            }
+            .status-attended {
+              background: #dcfce7;
+              color: #15803d;
+              border: 1px solid #bbf7d0;
+            }
+            .status-pending {
+              background: #fef3c7;
+              color: #b45309;
+              border: 1px solid #fde68a;
+            }
+            .person-footer {
+              background: #f8fafc;
+              border-top: 1px dashed #e2e8f0;
+              padding: 4px 12px;
+              font-size: 9.5px;
+              color: #64748b;
+              text-align: right;
+              font-weight: 600;
+            }
+            @media print {
+              body { padding: 0; }
+              .person-card { border: 1px solid #94a3b8; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="report-header">
+            <div>
+              <h1 class="report-title">Relatório de Serviços por Pessoa</h1>
+              <p class="report-subtitle">Filtros: ${statusFilterLabel} · ${periodLabel} · ${neighbLabel}</p>
+            </div>
+            <div class="report-meta">
+              <div><strong>Emissão:</strong> ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+              <div>Gabinete Vereador Nego</div>
+            </div>
+          </div>
+
+          <div class="kpi-bar">
+            <div class="kpi-item">
+              <span class="kpi-label">Pessoas com Demandas:</span>
+              <span class="kpi-value">${totalPessoas}</span>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">Total de Serviços:</span>
+              <span class="kpi-value">${totalServicos}</span>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">Atendidos:</span>
+              <span class="badge-kpi-attended">✔ ${totalAtendidos}</span>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">Pendentes:</span>
+              <span class="badge-kpi-pending">⏳ ${totalPendentes}</span>
+            </div>
+          </div>
+
+          ${peopleWithServices.map((person: any) => {
+            const personAttended = person.servicos.filter((s: any) => s.is_attended).length;
+            const personPending = person.servicos.filter((s: any) => !s.is_attended).length;
+            const phoneFormatted = [person.phone ? maskPhone(person.phone) : null, person.telefone_extra ? maskPhone(person.telefone_extra) : null].filter(Boolean).join(' / ');
+
+            return `
+              <div class="person-card">
+                <div class="person-header">
+                  <div class="person-name">
+                    <span>${person.full_name}${person.is_deceased ? ' (FALECIDO/A)' : ''}</span>
+                    <span class="person-type-tag">${person.person_type || 'Pessoa'}</span>
+                  </div>
+                  <div class="person-info">
+                    ${phoneFormatted ? `<span>📞 ${phoneFormatted}</span>` : ''}
+                    ${person.neighborhood ? `<span>📍 ${person.neighborhood}${person.city ? ` - ${person.city}` : ''}</span>` : ''}
+                  </div>
+                </div>
+                <table class="service-table">
+                  <thead>
+                    <tr>
+                      <th class="service-date">Data</th>
+                      <th class="service-desc">Descrição da Demanda / Serviço</th>
+                      <th class="service-status">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${person.servicos.map((s: any) => `
+                      <tr>
+                        <td class="service-date">${formatDate(s.service_date)}</td>
+                        <td class="service-desc">${s.description || '—'}</td>
+                        <td class="service-status">
+                          <span class="status-badge ${s.is_attended ? 'status-attended' : 'status-pending'}">
+                            ${s.is_attended ? '✔ Atendido' : '⏳ Pendente'}
+                          </span>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+                <div class="person-footer">
+                  Total da pessoa: ${person.servicos.length} serviço(s) (${personAttended} atendido(s), ${personPending} pendente(s))
+                </div>
+              </div>
+            `;
+          }).join('')}
+
+          <script>
+            window.onload = function() {
+              window.print();
+            }
+          </script>
+        </body>
+        </html>
+      `;
+
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(printHtml);
+        printWindow.document.close();
+      } else {
+        alert("Por favor, habilite pop-ups para imprimir o relatório.");
+      }
+      setShowServicesReportModal(false);
+    } catch (err: any) {
+      console.error("Erro ao gerar relatório de serviços:", err);
+      alert(`Erro ao gerar relatório: ${err.message || 'Erro desconhecido'}`);
+    } finally {
+      setServicesReportLoading(false);
+    }
+  };
+
   const generateDuplicatesReport = async () => {
     setLoading(true);
     try {
@@ -2075,6 +2524,19 @@ const PeopleScreen: React.FC = () => {
                   <button
                     onClick={() => {
                       setShowActionsMenu(false);
+                      setServicesReportStatus('all');
+                      setServicesReportStartDate('');
+                      setServicesReportEndDate('');
+                      setServicesReportNeighborhood('');
+                      setShowServicesReportModal(true);
+                    }}
+                    className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
+                  >
+                    <Briefcase className="h-4 w-4 mr-2.5 text-slate-400" /> Relatório por serviços
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
                       generateDuplicatesReport();
                     }}
                     className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
@@ -2090,6 +2552,16 @@ const PeopleScreen: React.FC = () => {
                     className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
                   >
                     <Tag className="h-4 w-4 mr-2.5 text-slate-400" /> Etiquetas do titular
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      setLabelTarget('natal');
+                      setShowLabelModal(true);
+                    }}
+                    className="w-full flex items-center px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium transition-colors text-left"
+                  >
+                    <Gift className="h-4 w-4 mr-2.5 text-slate-400" /> Etiquetas de Natal
                   </button>
                   <button
                     onClick={() => {
@@ -2294,13 +2766,20 @@ const PeopleScreen: React.FC = () => {
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nascimento</th>
                 <th 
                   className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer group hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                  onClick={() => handleSort('wpp_aniversario_enviado_em')}
+                  onClick={() => handleSort('alterado_por')}
                 >
                   <div className="flex items-center">
-                    Envio Aniversário {renderSortIcon('wpp_aniversario_enviado_em')}
+                    Alterado por {renderSortIcon('alterado_por')}
                   </div>
                 </th>
-                <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Sexo</th>
+                <th 
+                  className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer group hover:text-slate-700 dark:hover:text-slate-200 transition-colors text-center"
+                  onClick={() => handleSort('updated_at')}
+                >
+                  <div className="flex items-center justify-center">
+                    Última Atualização {renderSortIcon('updated_at')}
+                  </div>
+                </th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider hidden lg:table-cell">Cadastrado por</th>
                 <th className="py-4 px-6 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Ação</th>
               </tr>
@@ -2344,9 +2823,22 @@ const PeopleScreen: React.FC = () => {
                             </>
                           )}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium tracking-wide bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50">
-                          {p.person_type || 'Pessoa'}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {p.gender && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider border ${
+                              p.gender === 'Masculino' 
+                                ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border-blue-200 dark:border-blue-900/40' 
+                                : p.gender === 'Feminino' 
+                                  ? 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400 border-pink-200 dark:border-pink-900/40' 
+                                  : 'bg-slate-50 text-slate-500 dark:bg-slate-800/40 dark:text-slate-400 border-slate-200 dark:border-slate-800'
+                            }`}>
+                              {p.gender === 'Masculino' ? 'M' : p.gender === 'Feminino' ? 'F' : 'n/d'}
+                            </span>
+                          )}
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium tracking-wide bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50">
+                            {p.person_type || 'Pessoa'}
+                          </span>
+                        </div>
                         {search && p.dependentes && p.dependentes.length > 0 && (
                           (() => {
                             const q = removeAccents(search.toLowerCase());
@@ -2481,30 +2973,22 @@ const PeopleScreen: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td className="py-4 px-6 text-sm">
-                      {p.wpp_aniversario_enviado_em ? (
-                        <div className="inline-flex flex-col items-center justify-center bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800/30 shadow-sm min-w-[100px]">
-                          <span className="text-xs font-semibold whitespace-nowrap">
-                            {new Date(p.wpp_aniversario_enviado_em).toLocaleDateString('pt-BR')}
+                    <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400">
+                      {p.alterado_por || '—'}
+                    </td>
+                    <td className="py-4 px-6 text-sm text-center">
+                      {p.updated_at ? (
+                        <div className="inline-flex flex-col items-center justify-center text-slate-600 dark:text-slate-400">
+                          <span className="text-xs font-medium whitespace-nowrap">
+                            {new Date(p.updated_at).toLocaleDateString('pt-BR')}
                           </span>
-                          <span className="text-[10px] font-medium opacity-80 mt-0.5 whitespace-nowrap">
-                            {new Date(p.wpp_aniversario_enviado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                            {new Date(p.updated_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       ) : (
                         <span className="text-slate-400 dark:text-slate-600">—</span>
                       )}
-                    </td>
-                    <td className="py-4 px-6 text-sm text-center">
-                      <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                        p.gender === 'Masculino' 
-                          ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-900/40' 
-                          : p.gender === 'Feminino' 
-                            ? 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400 border border-pink-200 dark:border-pink-900/40' 
-                            : 'bg-slate-50 text-slate-500 dark:bg-slate-800/40 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
-                      }`}>
-                        {p.gender === 'Masculino' ? 'M' : p.gender === 'Feminino' ? 'F' : 'n/d'}
-                      </span>
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-400 hidden lg:table-cell">
                       {p.profiles?.full_name?.split(' ')[0] || '—'}
@@ -2645,7 +3129,7 @@ const PeopleScreen: React.FC = () => {
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                   <Tag className="h-5 w-5 text-blue-600" />
-                  Configurar Etiquetas ({labelTarget === 'titular' ? 'Titulares' : 'Dependentes'})
+                  Configurar Etiquetas ({labelTarget === 'titular' ? 'Titulares' : labelTarget === 'dependentes' ? 'Dependentes' : 'Natal'})
                 </h3>
                 <button onClick={() => setShowLabelModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
                   <Plus className="h-5 w-5 rotate-45" />
@@ -2913,6 +3397,121 @@ const PeopleScreen: React.FC = () => {
                     <>
                       <FileText className="h-4 w-4" />
                       Gerar PDF
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Relatório de Serviços por Pessoa (Modelo 1) */}
+      <AnimatePresence>
+        {showServicesReportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl">
+                  <Briefcase className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">Relatório por Serviços</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Layout agrupado por munícipe/pessoa</p>
+                </div>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                {/* Status do Serviço */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    Status dos Serviços
+                  </label>
+                  <select
+                    value={servicesReportStatus}
+                    onChange={(e) => setServicesReportStatus(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="all">Todos os Serviços (Atendidos e Pendentes)</option>
+                    <option value="pending">Apenas Pendentes (Não atendidos)</option>
+                    <option value="attended">Apenas Atendidos (Concluídos)</option>
+                  </select>
+                </div>
+
+                {/* Período de Data do Serviço */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
+                      Data Início (opcional)
+                    </label>
+                    <input
+                      type="date"
+                      value={servicesReportStartDate}
+                      onChange={(e) => setServicesReportStartDate(e.target.value)}
+                      className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
+                      Data Fim (opcional)
+                    </label>
+                    <input
+                      type="date"
+                      value={servicesReportEndDate}
+                      onChange={(e) => setServicesReportEndDate(e.target.value)}
+                      className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Filtro por Bairro */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    Bairro (opcional)
+                  </label>
+                  <select
+                    value={servicesReportNeighborhood}
+                    onChange={(e) => setServicesReportNeighborhood(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="">Todos os Bairros</option>
+                    {uniqueNeighborhoods.map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button 
+                  type="button"
+                  onClick={() => setShowServicesReportModal(false)} 
+                  disabled={servicesReportLoading}
+                  className="px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  onClick={generateServicesReport} 
+                  disabled={servicesReportLoading}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  {servicesReportLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="h-4 w-4" />
+                      Imprimir / Gerar PDF
                     </>
                   )}
                 </button>

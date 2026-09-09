@@ -5,7 +5,9 @@ import { supabase } from '../../lib/supabase';
 import { validateCPF, validateCNPJ, maskCPF, maskCNPJ, maskPhone, maskCEP } from '../../utils/validators';
 import DependentesSection from './DependentesSection';
 import ServicosSection from './ServicosSection';
+import FotosSection, { PessoaFoto } from './FotosSection';
 import { useAuth } from '../../contexts/AuthContext';
+import { getAlteradoPorCache, addToAlteradoPorCache } from '../../utils/alteradoPorCache';
 
 // ─── Tipos Exportados ─────────────────────────────────────────────────────────
 export interface Pessoa {
@@ -41,8 +43,10 @@ export interface Pessoa {
   is_deceased?: boolean;
   dependentes?: any[];
   servicos?: any[];
+  fotos?: PessoaFoto[];
   gender?: string;
   wpp_aniversario_enviado_em?: string | null;
+  alterado_por?: string | null;
 }
 
 export const PRONOMES = [
@@ -79,7 +83,7 @@ export const DEFAULT_FORM: Partial<Pessoa> = {
   latitude: null, longitude: null,
   housing_type: '', phone: '', telefone_extra: '', destino: '', birth_date: '', cpf: '', email: '',
   cnpj: '', facebook_url: '', instagram_url: '', reference: '', notes: '', atendimento_humano: false, mensagem_padrao: '',
-  is_deceased: false, gender: 'Não definido'
+  is_deceased: false, gender: 'Não definido', alterado_por: ''
 };
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -107,6 +111,57 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
   const [attachment, setAttachment] = useState<File | null>(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const wppFileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // ── Autocomplete "Alterado por" ──────────────────────────────────────────────
+  const [alteradoPorSuggestions, setAlteradoPorSuggestions] = useState<string[]>([]);
+  const [showAlteradoPorDropdown, setShowAlteradoPorDropdown] = useState(false);
+  const alteradoPorRef = React.useRef<HTMLDivElement>(null);
+
+  // Fecha dropdown ao clicar fora
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (alteradoPorRef.current && !alteradoPorRef.current.contains(e.target as Node)) {
+        setShowAlteradoPorDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleAlteradoPorChange = (value: string) => {
+    setForm(prev => ({ ...prev, alterado_por: value }));
+    const cached = getAlteradoPorCache();
+    if (value.trim()) {
+      const filtered = cached.filter(name =>
+        name.toLowerCase().includes(value.toLowerCase())
+      );
+      setAlteradoPorSuggestions(filtered);
+      setShowAlteradoPorDropdown(filtered.length > 0);
+    } else {
+      setAlteradoPorSuggestions(cached);
+      setShowAlteradoPorDropdown(cached.length > 0);
+    }
+  };
+
+  const handleAlteradoPorFocus = () => {
+    const cached = getAlteradoPorCache();
+    const value = form.alterado_por?.trim() || '';
+    if (value) {
+      const filtered = cached.filter(name =>
+        name.toLowerCase().includes(value.toLowerCase())
+      );
+      setAlteradoPorSuggestions(filtered);
+      setShowAlteradoPorDropdown(filtered.length > 0);
+    } else {
+      setAlteradoPorSuggestions(cached);
+      setShowAlteradoPorDropdown(cached.length > 0);
+    }
+  };
+
+  const handleAlteradoPorSelect = (name: string) => {
+    setForm(prev => ({ ...prev, alterado_por: name }));
+    setShowAlteradoPorDropdown(false);
+  };
 
   const handleSendInstantWpp = async () => {
     if (!form.phone) {
@@ -342,6 +397,7 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
       if (e) {
         setError(e.code === '23505' ? 'Já existe um cadastro com este CPF/CNPJ.' : e.message);
       } else {
+        if (form.alterado_por?.trim()) addToAlteradoPorCache(form.alterado_por.trim());
         onSuccess('Cadastro atualizado com sucesso!');
       }
     } else {
@@ -356,6 +412,7 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
       if (e) {
         setError(e.code === '23505' ? 'Já existe um cadastro com este CPF/CNPJ.' : e.message);
       } else {
+        if (form.alterado_por?.trim()) addToAlteradoPorCache(form.alterado_por.trim());
         setSavedPersonId(data.id);
         setPersonSavedBanner(true);
         setTimeout(() => setPersonSavedBanner(false), 5000);
@@ -835,6 +892,43 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
                 className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500" />
             </div>
 
+            {/* Campo Alterado por — com autocomplete local */}
+            <div className="col-span-1 md:col-span-12 lg:col-span-6">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Alterado por</label>
+              <div className="relative" ref={alteradoPorRef}>
+                <input
+                  type="text"
+                  value={form.alterado_por || ''}
+                  onChange={e => handleAlteradoPorChange(e.target.value)}
+                  onFocus={handleAlteradoPorFocus}
+                  placeholder="Nome de quem está alterando..."
+                  autoComplete="off"
+                  className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                />
+                <AnimatePresence>
+                  {showAlteradoPorDropdown && alteradoPorSuggestions.length > 0 && (
+                    <motion.ul
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+                    >
+                      {alteradoPorSuggestions.map((name, idx) => (
+                        <li
+                          key={idx}
+                          onClick={() => handleAlteradoPorSelect(name)}
+                          className="px-3.5 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-700 dark:hover:text-blue-400 cursor-pointer transition-colors"
+                        >
+                          {name}
+                        </li>
+                      ))}
+                    </motion.ul>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
             {/* Seção Configurações de Atendimento */}
             <div className="col-span-1 md:col-span-12 mt-2">
               <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl">
@@ -884,18 +978,30 @@ const PeopleForm: React.FC<PeopleFormProps> = ({ initialData, mode, onClose, onS
             disabled={!dependentesEnabled}
           />
         </div>
+
+        {/* ── Seção de Fotos (Galeria / Feed) ── */}
+        <div className="max-w-4xl mt-2">
+          <hr className="border-slate-100 dark:border-slate-800 mb-0" />
+          <FotosSection
+            pessoaId={pessoaId}
+            disabled={!dependentesEnabled}
+          />
+        </div>
       </div>
 
       {/* ── Footer fixo com Botões de Ação ─────────────────────────────────────── */}
       <div className="p-6 border-t border-slate-200 dark:border-slate-800 shrink-0 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30 rounded-b-2xl">
 
-        {/* Usuário que cadastrou */}
-        <div className="text-base text-slate-500 dark:text-slate-400 font-medium">
+        {/* Usuário que cadastrou e última alteração */}
+        <div className="text-sm text-slate-500 dark:text-slate-400 font-medium flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
           {mode === 'create' && profile?.full_name ? (
             <span>Cadastrado por: <strong className="text-slate-700 dark:text-slate-300">{profile.full_name}</strong></span>
           ) : mode === 'edit' && form.profiles?.full_name ? (
             <span>Cadastrado por: <strong className="text-slate-700 dark:text-slate-300">{form.profiles.full_name}</strong></span>
           ) : null}
+          {mode === 'edit' && initialData?.alterado_por && (
+            <span>Última alteração por: <strong className="text-slate-700 dark:text-slate-300">{initialData.alterado_por}</strong></span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
